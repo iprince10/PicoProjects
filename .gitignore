@@ -1,0 +1,10 @@
+# Ignore all build folders
+build/
+
+# Ignore all VS Code settings
+.vscode/*
+
+# But keep these VS Code files
+!.vscode/c_cpp_properties.json
+!.vscode/launch.json
+!.vscode/extensions.json
