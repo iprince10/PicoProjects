@@ -36,22 +36,22 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 
 
-add_executable(Indicator_TX_SIde Indicator_TX_SIde.c uart.c lora_tx.c sr04t.c timer.c)
-pico_set_program_name(Indicator_TX_SIde "Indicator_TX_SIde")
-pico_set_program_version(Indicator_TX_SIde "0.1")
+add_executable(Indicator_TX_Side Indicator_TX_Side.c uart.c lora_tx.c sr04t.c timer.c)
+pico_set_program_name(Indicator_TX_Side "Indicator_TX_Side")
+pico_set_program_version(Indicator_TX_Side "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(Indicator_TX_SIde 0)
-pico_enable_stdio_usb(Indicator_TX_SIde 0)
+pico_enable_stdio_uart(Indicator_TX_Side 0)
+pico_enable_stdio_usb(Indicator_TX_Side 0)
 
 # Add the standard library to the build
-target_link_libraries(Indicator_TX_SIde
+target_link_libraries(Indicator_TX_Side
         pico_stdlib)
 
 # Add the standard include files to the build
-target_include_directories(Indicator_TX_SIde PRIVATE
+target_include_directories(Indicator_TX_Side PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-pico_add_extra_outputs(Indicator_TX_SIde)
+pico_add_extra_outputs(Indicator_TX_Side)
 
