@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <timer.h>
 
 #define IO_BANK0_BASE 0x40014000u
 #define PAD_BANK0_BASE 0x4001c000u
@@ -42,17 +43,9 @@
 #define PROC0_INTE0_GPIO3_EDGE_LOW_IRQ_EN (1u << 14)
 #define PROC0_INTR0_GPIO3_LOW_CLEAR (1u << 14)
 
-#define TIMER_BASE 0x40054000u
-#define TIME_HR (*(volatile uint32_t *)(TIMER_BASE + 0x08))
-#define TIME_LR (*(volatile uint32_t *)(TIMER_BASE + 0x0c))
-
 #define ARM_CORTEX_NVIC_BASE (0xe0000000u)
 #define NVIC_ISER (*(volatile uint32_t *)(ARM_CORTEX_NVIC_BASE + 0xe100))
 #define NVIC_IO_IRQ_BANK0_EN (1u << 13)
-
-uint64_t read_timer(void);
-void delay_ms(uint64_t milliseconds);
-void delay_us(uint64_t microseconds);
 
 void uart0_init(void);
 void uart0_putc(char);
@@ -72,72 +65,6 @@ volatile uint8_t rise_captured = 0;
 volatile uint64_t rise_time = 0;
 volatile uint64_t fail_time = 0;
 volatile uint8_t ready_flag = 0;
-
-int main(void)
-{
-    uart0_init();
-    gpio3_init_input();
-    gpio2_init_output();
-
-    GPIO25_CTRL = GPIO_FUNC_SIO;
-    SIO_OE |= (1u << LED_PIN_25); // output enable for led pin gpio 25
-
-    uart0_puts("Ready\r\n");
-    __asm volatile("cpsie i");
-
-    while (1)
-    {
-        // Reset state for clean cycle
-        __asm volatile("cpsid i");
-        __asm volatile("" ::: "memory");
-        rise_captured = 0;
-        ready_flag = 0;
-        rise_time = 0;
-        fail_time = 0;
-        __asm volatile("" ::: "memory");
-        __asm volatile("cpsie i");
-
-        sr04t_send_trigger();
-        delay_ms(100); // wait for echo
-
-        // Read result
-        __asm volatile("cpsid i");
-        __asm volatile("" ::: "memory");
-        uint64_t r = rise_time, f = fail_time;
-        uint8_t flag = ready_flag;
-        ready_flag = 0;
-        __asm volatile("" ::: "memory");
-        __asm volatile("cpsie i");
-
-        if (flag && f > r)
-        {
-            uint64_t duration_us = f - r;
-            uint64_t distance_cm = duration_us / 58;
-
-            if (distance_cm > 500)
-            {
-                // sensor's timeout artifact -> water too close to measure -> tank full
-                uart0_puts("TANK FULL\r\n");
-            }
-            else if (distance_cm <= 20)
-            {
-                // shouldn't normally happen (sensor floor), but treat as full too, just in case
-                uart0_puts("TANK FULL\r\n");
-            }
-            else
-            {
-                uart0_putnum(distance_cm);
-                uart0_puts(" cm\r\n");
-            }
-        }
-        else
-        {
-            uart0_puts("no measurement\r\n");
-        }
-
-        delay_ms(50); // wait between triggers
-    }
-}
 
 void gpio2_init_output(void)
 {
@@ -248,40 +175,5 @@ void uart0_putnum(uint64_t num)
     for (int i = index - 1; i >= 0; i--)
     {
         uart0_putc(buffer[i]);
-    }
-}
-
-uint64_t read_timer(void)
-{
-    uint32_t high1, low, high2;
-    do
-    {
-        high1 = TIME_HR;
-        low = TIME_LR;
-        high2 = TIME_HR;
-    } while (high1 != high2);
-
-    return ((uint64_t)high2 << 32) | low;
-}
-
-void delay_ms(uint64_t milliseconds)
-{
-    uint64_t start = read_timer();
-    uint64_t target_us = milliseconds * 1000;
-
-    while ((read_timer() - start) < target_us)
-    {
-        // wait;
-    }
-}
-
-void delay_us(uint64_t microseconds)
-{
-    uint64_t start = read_timer();
-    uint64_t target_us = microseconds;
-
-    while ((read_timer() - start) < target_us)
-    {
-        // wait;
     }
 }

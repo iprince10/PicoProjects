@@ -1,10 +1,26 @@
-# Ignore all build folders
+# Build directories anywhere in the repository
 build/
+cmake-build-*/
 
-# Ignore all VS Code settings
-.vscode/*
+# VS Code settings anywhere in the repository
+.vscode/
 
-# But keep these VS Code files
-!.vscode/c_cpp_properties.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+
+# Compiled/generated firmware
+*.o
+*.elf
+*.map
+*.bin
+*.hex
+*.uf2
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

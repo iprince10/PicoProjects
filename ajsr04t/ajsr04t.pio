@@ -1,0 +1,25 @@
+.program ajsr04t
+
+    SET PINDIRS, 1      ;addr 0 - one-time: GPIO2 becomes output
+
+.wrap_target 
+    PULL NOBLOCK        ;addr 1 - pull the 40000 scratch x value from fifo
+    MOV X, OSR          ;addr 2 - move the 40000 into scratch x register
+    SET PINS, 1 [19]    ;addr 3 - set trigger pin high and delay 10 us , 2 cycles is 1us delay
+    SET PINS, 0         ;addr 4 - set trigger pin low
+
+wait_high: 
+    WAIT 0 GPIO 3   ;addr 5 -
+    WAIT 1 GPIO 3   ;addr 6 -
+
+count_loop: 
+    JMP PIN, still_high ;addr 7 -
+    JMP done            ;addr 8 -
+
+still_high:
+    JMP X--, count_loop ;addr 9 -
+
+done:
+    MOV ISR, X          ;addr 10
+    PUSH                ;addr 11
+.wrap
