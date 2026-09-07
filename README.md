@@ -395,6 +395,4 @@ Interested in:
 
 ## License
 
-This repository is primarily a personal collection of embedded-systems projects and experiments.
-
-Unless otherwise specified, the code is intended for learning, experimentation, and educational purposes.
+This repository is primarily a personal collection of embedded-systems projects and experiments, the code is intended for learning, experimentation, and educational purposes.
