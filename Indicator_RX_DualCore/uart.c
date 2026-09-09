@@ -53,8 +53,8 @@ void uart0_init(void)
 
     GPIO0_CTRL = UART0_FUNC;
 
-    UART0_IBRD = 813;
-    UART0_FBRD = 51;
+    UART0_IBRD = 67;
+    UART0_FBRD = 52;
 
     UART0_LCR_H = UART0_LCR_H_WLEN | UART0_LCR_H_FEN; // 8N1 8data, No parity, 1 stop bit, enable fifo
 

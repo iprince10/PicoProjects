@@ -278,9 +278,9 @@ int main(void)
     buzzer_switch_led_init();
 
     // Temporary power-on buzzer test.  A BC547 low-side switch is active-HIGH.
-    SIO_GPIO_OUT_SET = GPIO9; // buzzer ON
-    delay_ms(500);
-    SIO_GPIO_OUT_CLR = GPIO9; // buzzer OFF
+    // SIO_GPIO_OUT_SET = GPIO9; // buzzer ON
+    // delay_ms(500);
+    // SIO_GPIO_OUT_CLR = GPIO9; // buzzer OFF
 
     launch_core1();
 

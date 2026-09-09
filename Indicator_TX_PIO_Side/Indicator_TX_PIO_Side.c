@@ -44,6 +44,7 @@ int main(void)
 
         uint32_t duration_us = read_result();
 
+        
         uint32_t distance_cm = duration_us / 58;
 
         uint8_t status;
