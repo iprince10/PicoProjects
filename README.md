@@ -88,6 +88,9 @@ The repository contains projects involving several embedded peripherals and modu
 | `Indicator_TX_SIde`     | Transmitter-side embedded application                          |
 | `Indicator_TX_PIO_Side` | Transmitter application using PIO-based ultrasonic measurement |
 | `Indicator_RX_Side`     | Receiver-side indicator, display and alert application         |
+| `Indicator_RX_DualCore` | Dual-core receiver-side indicator and display application       |
+
+One newer addition is `Indicator_RX_DualCore`, which demonstrates a dual-core receiver-side design for handling communication, display updates, and indicator logic in a structured way.
 
 ---
 
@@ -330,6 +333,9 @@ PicoProjects/
 │
 ├── Indicator_RX_Side/
 │   └── Receiver + display + alert system
+│
+├── Indicator_RX_DualCore/
+│   └── Dual-core receiver + display application
 │
 ├── .gitignore
 └── README.md
