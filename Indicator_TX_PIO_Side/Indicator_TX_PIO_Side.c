@@ -33,7 +33,7 @@ int main(void)
 
     while (1)
     {
-        send_timeout_write_fifo();
+        send_timeout_write_fifo(); // send a 40000 value in scratch x register 
 
         // The PIO program returns within 40 ms, including its no-echo timeout.
         // Do not read RXF0 until a fresh result has actually been pushed.
@@ -44,7 +44,6 @@ int main(void)
 
         uint32_t duration_us = read_result();
 
-        
         uint32_t distance_cm = duration_us / 58;
 
         uint8_t status;
