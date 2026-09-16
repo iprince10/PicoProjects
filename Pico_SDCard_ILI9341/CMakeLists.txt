@@ -35,7 +35,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(Pico_SDCard_ILI9341 Pico_SDCard_ILI9341.c ili9341.c timer.c uart.c bitmap.c)
+add_executable(Pico_SDCard_ILI9341 Pico_SDCard_ILI9341.c ili9341.c timer.c uart.c bitmap.c sdcard.c)
 
 pico_set_program_name(Pico_SDCard_ILI9341 "Pico_SDCard_ILI9341")
 pico_set_program_version(Pico_SDCard_ILI9341 "0.1")

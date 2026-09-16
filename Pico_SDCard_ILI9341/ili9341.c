@@ -90,7 +90,7 @@ void draw_tx_offline(void);
 
 void ili9341_init()
 {
-    PAD_GPIO16 = 0x63;
+    PAD_GPIO16 = 0x63;  //these are the pad config setting for each gpio pin
     PAD_GPIO17 = 0x23;
     PAD_GPIO18 = 0x23;
     PAD_GPIO19 = 0x23;
@@ -108,30 +108,32 @@ void ili9341_init()
     SIO_GPIO_OUT_SET = (1u << 21);             // rst high
     SIO_GPIO_OUT_CLEAR = (1u << 20);           // clear d/c pin
 
-    spi0_init();
+    spi0_init(); //spi0 initialise 
 
-    ili9341_hw_reset();
+    ili9341_hw_reset(); //hardware reset using hardware pin 21
 
-    ili9341_send_init_commands();
+    ili9341_send_init_commands(); // initialising commands 
 }
 
 void spi0_init(void)
 {
-    CLK_PERI_CTRL |= CLK_PERI_CTRL_ENABLE;
-    RESETS_RESET &= ~(RESETS_RESET_SPI0);
+    CLK_PERI_CTRL |= CLK_PERI_CTRL_ENABLE;  //enable clock , by default clock is gated for the spi0 peripheral
+    RESETS_RESET &= ~(RESETS_RESET_SPI0);  // do a software reset and wait for reset done signal
     while (!(RESETS_RESET_DONE & RESETS_RESET_SPI0))
     {
     };
 
-    SPI0_SSPCPSR = 2;
-    SPI0_SSPCR0 = 0x0507;
-    SPI0_SSPCR1 = SPI0_SSPCR1_SSE;
+    // the clock freq here is 10.42 MHz because of 2 in cpsr and 5 in sspcr0
+
+    SPI0_SSPCPSR = 2; // this is for spio clock register 
+    SPI0_SSPCR0 = 0x0507;  // control register of spi0 , the 5 is the clock divisor inside control register 0 
+    SPI0_SSPCR1 = SPI0_SSPCR1_SSE;  //synchronous serial port enable 
     delay_ms(100);
 }
 
 void ili9341_hw_reset()
 {
-    SIO_GPIO_OUT_CLEAR = (1u << 21);
+    SIO_GPIO_OUT_CLEAR = (1u << 21); // do a hardware reset of the display
     delay_ms(1);
     SIO_GPIO_OUT_SET = (1u << 21);
     delay_ms(120);
@@ -139,12 +141,12 @@ void ili9341_hw_reset()
 
 void spi_write_byte(uint8_t byte)
 {
-    while (!(SPI0_SSPSR & SPI0_SSPSR_TNF))
+    while (!(SPI0_SSPSR & SPI0_SSPSR_TNF)) // wait for transmit fifo empty
     {
     }
 
-    SPI0_SSPDR = byte;
-    while (SPI0_SSPSR & SPI0_SSPSR_BSY)
+    SPI0_SSPDR = byte; // write a byte to the spi0 data register 
+    while (SPI0_SSPSR & SPI0_SSPSR_BSY) // read and discard the echo byte
     {
     }
     volatile uint32_t dummy = SPI0_SSPDR;

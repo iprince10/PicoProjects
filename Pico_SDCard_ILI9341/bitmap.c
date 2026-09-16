@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <bitmap.h>
+#include "bitmap.h"
 
 const uint8_t font_5x7[36][7] = {
     {0x70, 0x88, 0x88, 0x88, 0x88, 0x88, 0x70}, // '0'
