@@ -16,6 +16,8 @@
 
 int main()
 {
+
+    // blink code just for testing
     GPIO25_CTRL = GPIO_FUNC_SIO;
     SIO_GPIO_OE = GPIO25;
     SIO_GPIO_OUT |= GPIO25;
