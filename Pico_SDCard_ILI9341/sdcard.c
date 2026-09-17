@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <timer.h>
+#include "timer.h"
 
 #define SIO_BASE 0xd0000000u
 #define SIO_GPIO_OE (*(volatile uint32_t *)(SIO_BASE + 0x020))
@@ -59,3 +59,5 @@ void spi1_init(void)
     SPI1_SSPCR1 = SPI1_SSPCR1_SSE; // synchronous serial port enable
     delay_ms(100);
 }
+
+// remember to make cs of spi1 as gpio cause we need to manually make it low all the time
