@@ -82,7 +82,7 @@ uint8_t spi1_transfer(uint8_t data)
     }
     SPI1_SSPDR = data; // send data
 
-    while (!(SPI1_SSPCPSR & SPI1_SSPSR_RNE)) // loop enters when rne bit is 0 means empty
+    while (!(SPI1_SSPSR & SPI1_SSPSR_RNE)) // loop enters when rne bit is 0 means empty
     {
         // wait
     }
@@ -104,7 +104,7 @@ void cs_select(void)
 
 void cs_deselect(void)
 {
-    SIO_GPIO_OUT_CLEAR = (1u << 13); // cs high = done talking
+    SIO_GPIO_OUT_SET = (1u << 13); // cs high = done talking
 }
 
 void sd_dummy_clocks(void) // dummy clocks at startup
@@ -118,7 +118,7 @@ void sd_dummy_clocks(void) // dummy clocks at startup
 }
 
 // sending command
-void sd_send_command(uint8_t cmd, uint8_t arg, uint8_t crc)
+void sd_send_command(uint8_t cmd, uint32_t arg, uint8_t crc)
 {
     spi1_transfer(0x40 | cmd);         // start bit(0) + cmd number as 4 here 4 is 0100
     spi1_transfer((arg >> 24) & 0xFF); // MSB First big endian format
@@ -159,6 +159,6 @@ uint8_t sd_cmd0(void)
         {
             return 1;
         }
-        return 0;
     }
+    return 0;
 }
