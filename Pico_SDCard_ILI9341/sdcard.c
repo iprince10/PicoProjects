@@ -8,7 +8,7 @@
 #define SIO_GPIO_OUT (*(volatile uint32_t *)(SIO_BASE + 0x010))
 #define SIO_GPIO_OUT_SET (*(volatile uint32_t *)(SIO_BASE + 0x014))
 #define SIO_GPIO_OUT_CLEAR (*(volatile uint32_t *)(SIO_BASE + 0x018))
-#define SIO_GPIO_OUT_XOR (*(volatile uint32_t *)(SIO_BASE + 0x01d))
+#define SIO_GPIO_OUT_XOR (*(volatile uint32_t *)(SIO_BASE + 0x01c))
 #define SIO_GPIO_IN (*(volatile uint32_t *)(SIO_BASE + 0x004))
 
 #define IO_BANK0_BASE 0x40014000u
@@ -70,9 +70,8 @@ void spi1_init(void)
     RESETS_RESET &= ~(RESETS_RESET_SPI1);  // do a software reset and wait for reset done signal
     while (!(RESETS_RESET_DONE & RESETS_RESET_SPI1))
     {
+        //wait 
     };
-
-    // the clock freq here is 10.42 MHz because of 2 in cpsr and 5 in sspcr0
 
     SPI1_SSPCPSR = 54;             // this is for spio clock register 386KHz for init slower pulse at the start
     SPI1_SSPCR0 = 0x0507;          // control register of spi0 , the 5 is the clock divisor inside control register 0
@@ -118,7 +117,7 @@ void cs_deselect(void)
 void sd_dummy_clocks(void) // dummy clocks at startup
 {
     cs_deselect(); // high means sd not being addressed
-    for (int i = 0; i <= 10; i++)
+    for (int i = 0; i < 10; i++)
     {
         spi1_transfer(0xFF); // 10 bytes is 80 dummy clock pulses as 1 byte = 8 bits
         //  sending streams of 1's in the init even if cs high fails the commands wont be detected by sd as they start as 0
