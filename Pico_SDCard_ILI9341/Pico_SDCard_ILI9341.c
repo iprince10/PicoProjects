@@ -32,6 +32,7 @@ int main()
     sd_dummy_clocks();
     led_init();
 
+    // cmd0 
     uart0_puts("CMD0....\r\n");
     if (sd_cmd0())
     {
@@ -42,6 +43,7 @@ int main()
         uart0_puts("CMD0 FAIL\r\n");
     }
 
+    // cmd8
     uart0_puts("CMD8....\r\n");
     uint8_t resp = sd_cmd8();
     if (resp == 1)

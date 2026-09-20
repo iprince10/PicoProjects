@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "timer.h"
+#include "uart.h"
 
 #define SIO_BASE 0xd0000000u
 #define SIO_GPIO_OE (*(volatile uint32_t *)(SIO_BASE + 0x020))
@@ -187,10 +188,18 @@ uint8_t sd_cmd8(void)
     echo[0] = spi1_transfer(0xFF); // the 4 echo bytes (this longer reply is called R7)
     echo[1] = spi1_transfer(0xFF);
     echo[2] = spi1_transfer(0xFF); // this contains the voltage ans if R7
-    echo[3] = spi1_transfer(0xFF); // this conatins the 0xAA if R7
+    echo[3] = spi1_transfer(0xFF); // this contains the 0xAA if R7
     cs_deselect();                 // pull cs high
     spi1_transfer(0xFF);           // trailing bits to confirm cs high
 
+    uart0_puts("resp1=");
+    uart0_puthex(resp1);
+    uart0_puts(" echo=");
+    for (int i = 0; i < 4; i++)
+    {
+        uart0_puthex(echo[i]);
+    }
+    uart0_puts("\r\n");
     if (resp1 == 0xFF) // no answer at all
     {
         return 0;

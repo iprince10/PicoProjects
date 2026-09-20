@@ -149,8 +149,10 @@ int uart1_has_data(void)
     return (UART1_FR & UART1_FR_RXFE) == 0;
 }
 
-                // Print readable hex to serial monitor
-                // const char hex[] = "0123456789ABCDEF";
-                // uart0_putc(hex[(byte >> 4) & 0x0F]);
-                // uart0_putc(hex[byte & 0x0F]);
-                // uart0_putc(' ');
+void uart0_puthex(uint8_t byte)
+{
+    const char hex[] = "0123456789ABCDEF";
+    uart0_putc(hex[(byte >> 4) & 0x0F]);
+    uart0_putc(hex[byte & 0x0F]);
+    uart0_putc(' ');
+}
