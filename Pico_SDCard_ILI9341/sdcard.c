@@ -61,12 +61,12 @@ void spi1_init(void)
 
     PAD_GPIO10 = 0x23; // SCK
     PAD_GPIO11 = 0x23; // MOSI (TX)
-    PAD_GPIO12 = 0x63; // MISO (RX) - 0x63 = IE set so we can read the card
+    PAD_GPIO12 = 0x63; // MISO (RX) - 0x63 = IE set to read the card
     GPIO10_CTRL = GPIO_FUNC_SPI1;
     GPIO11_CTRL = GPIO_FUNC_SPI1;
     GPIO12_CTRL = GPIO_FUNC_SPI1;
 
-    CLK_PERI_CTRL |= CLK_PERI_CTRL_ENABLE; // enable clock , by default clock is gated for the spi0 peripheral
+    CLK_PERI_CTRL |= CLK_PERI_CTRL_ENABLE; // enable clock , by default clock is gated for the spi1 peripheral
     RESETS_RESET &= ~(RESETS_RESET_SPI1);  // do a software reset and wait for reset done signal
     while (!(RESETS_RESET_DONE & RESETS_RESET_SPI1))
     {
