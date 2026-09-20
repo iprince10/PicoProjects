@@ -13,6 +13,7 @@
 #define SIO_BASE 0xd0000000u
 #define SIO_GPIO_OE (*(volatile uint32_t *)(SIO_BASE + 0x020))
 #define SIO_GPIO_OUT (*(volatile uint32_t *)(SIO_BASE + 0x010))
+#define SIO_GPIO_OUT_XOR (*(volatile uint32_t *)(SIO_BASE + 0x01c))
 #define GPIO25 (1u << 25)
 
 void led_init(void)
@@ -43,6 +44,7 @@ int main()
 
     while (1)
     {
-        delay_ms(1000);
+        SIO_GPIO_OUT_XOR = GPIO25;
+        delay_ms(500);
     }
 }
