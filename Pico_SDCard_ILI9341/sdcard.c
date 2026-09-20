@@ -74,7 +74,7 @@ void spi1_init(void)
 
 // remember to make cs of spi1 as gpio cause we need to manually make it low all the time
 
-static uint8_t spi1_transfer(uint8_t data)
+uint8_t spi1_transfer(uint8_t data)
 {
     while (!(SPI1_SSPSR & SPI1_SSPSR_TNF)) // loop exits when tnf bit is 1 and enters when tnf bit is 0 ( 0 means full)
     {
@@ -89,7 +89,7 @@ static uint8_t spi1_transfer(uint8_t data)
     return (uint8_t)(SPI1_SSPDR & 0xFF); // read reply fifo
 }
 
-static void cs_init(void)
+void cs_init(void)
 {
     GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
     PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
@@ -97,17 +97,17 @@ static void cs_init(void)
     SIO_GPIO_OUT_SET = (1u << 13); // idle cs = high means card ignored
 }
 
-static void cs_select(void)
+void cs_select(void)
 {
     SIO_GPIO_OUT_CLEAR = (1u << 13); // cs low is talking to the card
 }
 
-static void cs_deselect(void)
+void cs_deselect(void)
 {
     SIO_GPIO_OUT_CLEAR = (1u << 13); // cs high = done talking
 }
 
-static void sd_dummy_clocks(void) // dummy clocks at startup
+void sd_dummy_clocks(void) // dummy clocks at startup
 {
     cs_deselect(); // high means sd not being addressed
     for (int i = 0; i <= 10; i++)
@@ -118,7 +118,7 @@ static void sd_dummy_clocks(void) // dummy clocks at startup
 }
 
 // sending command
-static void sd_send_command(uint8_t cmd, uint8_t arg, uint8_t crc)
+void sd_send_command(uint8_t cmd, uint8_t arg, uint8_t crc)
 {
     spi1_transfer(0x40 | cmd);         // start bit(0) + cmd number as 4 here 4 is 0100
     spi1_transfer((arg >> 24) & 0xFF); // MSB First big endian format
@@ -129,7 +129,7 @@ static void sd_send_command(uint8_t cmd, uint8_t arg, uint8_t crc)
 }
 
 // Poll miso until the top bit is 0 with a timeout i.e. 2000
-static uint8_t sd_read_r1(void)
+uint8_t sd_read_r1(void)
 {
     uint8_t response;
     for (int i = 0; i < SD_R1_TIMEOUT; i++)
@@ -145,7 +145,7 @@ static uint8_t sd_read_r1(void)
 // a healthy response is usually 0x01 (just idle) during init, and 0x00 once ready
 
 // cmd0 is go to ideal state , first real command , crc to be checked which is fixed constant 0x95
-static uint8_t sd_cmd0(void)
+uint8_t sd_cmd0(void)
 {
     uint8_t resp;
     for (int i = 0; i < 10; i++) // sending again & again as cmd0 may or may not register if sent only once

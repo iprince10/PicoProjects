@@ -4,6 +4,7 @@
 #include "timer.h"
 #include "uart.h"
 #include "bitmap.h"
+#include "sdcard.h"
 
 #define IO_BANK0_BASE 0x40014000u 
 
@@ -25,6 +26,7 @@ int main()
     SIO_GPIO_OE = GPIO25;
     SIO_GPIO_OUT |= GPIO25;
     delay_ms(500);
+
     while (1)
     {
         SIO_GPIO_OUT &= ~GPIO25;
