@@ -29,6 +29,7 @@ int main()
     spi1_init();
     cs_init(); // after spi1 init always
     sd_dummy_clocks();
+    led_init();
 
     uart0_puts("CMD0....\r\n");
     if (sd_cmd0())
@@ -39,6 +40,7 @@ int main()
     {
         uart0_puts("CMD0 FAIL\r\n");
     }
+
     while (1)
     {
         delay_ms(1000);
