@@ -11,11 +11,9 @@
 
 #define GPIO_FUNC_SIO 5u
 #define GPIO25_CTRL (*(volatile uint32_t *)(IO_BANK0_BASE + 0xcc))
-
 #define SIO_BASE 0xd0000000u
 #define SIO_GPIO_OE (*(volatile uint32_t *)(SIO_BASE + 0x020))
 #define SIO_GPIO_OUT (*(volatile uint32_t *)(SIO_BASE + 0x010))
-
 #define GPIO25 (1u << 25)
 
 
