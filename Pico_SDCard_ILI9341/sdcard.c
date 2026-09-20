@@ -56,6 +56,9 @@
 #define R1_PARAMETER_ERROR (1u << 6)
 // bit 7 is always 0 in a valid R1 , that's how we detect the response at all
 
+#define SD_CMD8_ARG 0x000001AAu // bits 11:8 = 2.7-3.6V, bits 7:0 = check pattern 0xAA
+#define SD_CMD8_CRC 0x87        // const crc byte of cmd8
+
 void spi1_init(void)
 {
 
@@ -70,7 +73,7 @@ void spi1_init(void)
     RESETS_RESET &= ~(RESETS_RESET_SPI1);  // do a software reset and wait for reset done signal
     while (!(RESETS_RESET_DONE & RESETS_RESET_SPI1))
     {
-        //wait 
+        // wait
     };
 
     SPI1_SSPCPSR = 54;             // this is for spio clock register 386KHz for init slower pulse at the start
@@ -158,7 +161,7 @@ uint8_t sd_cmd0(void)
     for (int i = 0; i < 10; i++) // sending again & again as cmd0 may or may not register if sent only once
     {
         cs_select();                          // talking to card cs low
-        sd_send_command(0, 0x00000000, 0x95); // cmd0 + crc which is 0x95 constant
+        sd_send_command(0, 0x00000000, 0x95); // cmd0 + crc which is 0x95 constant for CMD 0 always it comes precomputed
         resp = sd_read_r1();                  // read reply after sending cmd0
         cs_deselect();                        // cs is high after exchange
         spi1_transfer(0xFF);                  // trailing bits just to register the cs high and complete whatever the internal housekeeping and release the miso line
@@ -168,4 +171,38 @@ uint8_t sd_cmd0(void)
         }
     }
     return 0;
+}
+
+// the cmd8 byte responds in 1 status byte + 4 echo bytes
+uint8_t sd_cmd8(void)
+{
+    uint8_t resp1, echo[4];
+
+    cs_select(); // cs must stay low during whole cmd8 convo
+    sd_send_command(8, SD_CMD8_ARG, SD_CMD8_CRC);
+    // 8 is the cmd number
+    // arg is 0x000001AA in which 01 is the voltage range specified and AA is the random byte to be echoed back
+    // cmd8_CRC is 0x87 , the constant crc for cmd8 except for cmd 0 and cmd 8 , every other cmd uses 0x01 i.e. dont care value
+    resp1 = sd_read_r1();
+    echo[0] = spi1_transfer(0xFF); // the 4 echo bytes (this longer reply is called R7)
+    echo[1] = spi1_transfer(0xFF);
+    echo[2] = spi1_transfer(0xFF); // this contains the voltage ans if R7
+    echo[3] = spi1_transfer(0xFF); // this conatins the 0xAA if R7
+    cs_deselect();                 // pull cs high
+    spi1_transfer(0xFF);           // trailing bits to confirm cs high
+
+    if (resp1 == 0xFF) // no answer at all
+    {
+        return 0;
+    }
+    if (resp1 & R1_ILLEGAL_COMMAND) // ancient card: doesn't know CMD8
+    {
+        return 2;
+    }
+    if (echo[2] == 0x01 && echo[3] == 0xAA) // modern card + token verified
+    {
+        return 1;
+    }
+
+    return 0; // answered, but token wrong
 }

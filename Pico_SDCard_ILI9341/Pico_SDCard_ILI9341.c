@@ -42,6 +42,21 @@ int main()
         uart0_puts("CMD0 FAIL\r\n");
     }
 
+    uart0_puts("CMD8....\r\n");
+    uint8_t resp = sd_cmd8();
+    if (resp == 1)
+    {
+        uart0_puts("CMD8 Ok - modern card, token echoed\r\n");
+    }
+    else if (resp == 2)
+    {
+        uart0_puts("CMD8 - V1 card (old)\r\n");
+    }
+    else
+    {
+        uart0_puts("CMD8 FAIL\r\n");
+    }
+
     while (1)
     {
         SIO_GPIO_OUT_XOR = GPIO25;
