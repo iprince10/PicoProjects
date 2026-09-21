@@ -46,29 +46,15 @@
 #define RESETS_RESET_SPI1 (1u << 17)                                  // SPI1 Reset bit is 17
 #define RESETS_RESET_DONE (*(volatile uint32_t *)(RESETS_BASE + 0x8)) // reset reset done, bit is set when reset done signal has been sent by peripheral
 
-// the first command & repsonse defines
-#define SD_R1_TIMEOUT 2000      // time- out value after sending init command
-#define R1_IDLE_STATE (1u << 0) // 1 = card still in idle (not ready)
-#define R1_ERASE_RESET (1u << 1)
-#define R1_ILLEGAL_COMMAND (1u << 2) // 1 = card doesn't know that command
-#define R1_CRC_ERROR (1u << 3)
-#define R1_ERASE_SEQ_ERROR (1u << 4)
-#define R1_ADDRESS_ERROR (1u << 5)
-#define R1_PARAMETER_ERROR (1u << 6)
-// bit 7 is always 0 in a valid R1 , that's how we detect the response at all
-
-#define SD_CMD8_ARG 0x000001AAu // bits 11:8 = 2.7-3.6V, bits 7:0 = check pattern 0xAA
-#define SD_CMD8_CRC 0x87        // const crc byte of cmd8
-
 void spi1_init(void)
 {
 
     PAD_GPIO10 = 0x23; // SCK
     PAD_GPIO11 = 0x23; // MOSI (TX)
     PAD_GPIO12 = 0x63; // MISO (RX) - 0x63 = IE set to read the card
-    GPIO10_CTRL = GPIO_FUNC_SPI1;
-    GPIO11_CTRL = GPIO_FUNC_SPI1;
-    GPIO12_CTRL = GPIO_FUNC_SPI1;
+    GPIO10_CTRL = GPIO_FUNC_SPI1;  //sck
+    GPIO11_CTRL = GPIO_FUNC_SPI1;  //tx mosi
+    GPIO12_CTRL = GPIO_FUNC_SPI1;  //rx miso
 
     CLK_PERI_CTRL |= CLK_PERI_CTRL_ENABLE; // enable clock , by default clock is gated for the spi1 peripheral
     RESETS_RESET &= ~(RESETS_RESET_SPI1);  // do a software reset and wait for reset done signal
@@ -81,9 +67,34 @@ void spi1_init(void)
     SPI1_SSPCR0 = 0x0507;          // control register of spi0 , the 5 is the clock divisor inside control register 0
     SPI1_SSPCR1 = SPI1_SSPCR1_SSE; // synchronous serial port enable
     delay_ms(100);
+
+    // cs init as plain sio 
+    GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
+    PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
+    SIO_GPIO_OE_SET = (1u << 13);  // enable output
+    SIO_GPIO_OUT_SET = (1u << 13); // idle cs = high means card ignored
 }
 
 // remember to make cs of spi1 as gpio cause we need to manually make it low all the time
+
+// void cs_init(void)
+// {
+//     GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
+//     PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
+//     SIO_GPIO_OE_SET = (1u << 13);  // enable output
+//     SIO_GPIO_OUT_SET = (1u << 13); // idle cs = high means card ignored
+// }
+
+// makes cs low
+void cs_select(void)
+{
+    SIO_GPIO_OUT_CLEAR = (1u << 13); // cs low is talking to the card
+}
+//makes cs high
+void cs_deselect(void)
+{
+    SIO_GPIO_OUT_SET = (1u << 13); // cs high = done talking
+}
 
 uint8_t spi1_transfer(uint8_t data)
 {
@@ -100,35 +111,20 @@ uint8_t spi1_transfer(uint8_t data)
     return (uint8_t)(SPI1_SSPDR & 0xFF); // read reply fifo
 }
 
-void cs_init(void)
-{
-    GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
-    PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
-    SIO_GPIO_OE_SET = (1u << 13);  // enable output
-    SIO_GPIO_OUT_SET = (1u << 13); // idle cs = high means card ignored
-}
-
-void cs_select(void)
-{
-    SIO_GPIO_OUT_CLEAR = (1u << 13); // cs low is talking to the card
-}
-
-void cs_deselect(void)
-{
-    SIO_GPIO_OUT_SET = (1u << 13); // cs high = done talking
-}
-
 void sd_dummy_clocks(void) // dummy clocks at startup
 {
     cs_deselect(); // high means sd not being addressed
     for (int i = 0; i < 10; i++)
     {
         spi1_transfer(0xFF); // 10 bytes is 80 dummy clock pulses as 1 byte = 8 bits
-        //  sending streams of 1's in the init even if cs high fails the commands wont be detected by sd as they start as 0
+        //  sending streams of 1's in the init even if cs high fails the commands wont be detected by sd as they start with 0
     }
 }
 
-// sending command
+// sending command , commands consists of 6 bytes:-
+// first byte is start bit + cmd number 
+// next four bytes are argument bytes send in little endian , MSB first in lowest address
+// sixth byte is 7 bit CRC + 1 bit of 1 at the end as a end marker
 void sd_send_command(uint8_t cmd, uint32_t arg, uint8_t crc)
 {
     spi1_transfer(0x40 | cmd);         // start bit(0) + cmd number as 4 here 4 is 0100
@@ -139,34 +135,45 @@ void sd_send_command(uint8_t cmd, uint32_t arg, uint8_t crc)
     spi1_transfer(crc);        // crc mostly ignored , only used in cmd0 and cmd8 , contains 7 bits + 1 bit of 1 as a trailing end marker
 }
 
+// the first command & repsonse defines
+#define SD_R1_TIMEOUT 2000      // time- out value after sending init command
+#define R1_IDLE_STATE (1u << 0) // 1 = card still in idle (not ready)
+#define R1_ERASE_RESET (1u << 1)
+#define R1_ILLEGAL_COMMAND (1u << 2) // 1 = card doesn't know that command
+#define R1_CRC_ERROR (1u << 3)
+#define R1_ERASE_SEQ_ERROR (1u << 4)
+#define R1_ADDRESS_ERROR (1u << 5)
+#define R1_PARAMETER_ERROR (1u << 6)
+// bit 7 is always 0 in a valid R1 , that's how we detect the resp at all
+
 // Poll miso until the top bit is 0 with a timeout i.e. 2000
 uint8_t sd_read_r1(void)
 {
-    uint8_t response;
+    uint8_t r1;
     for (int i = 0; i < SD_R1_TIMEOUT; i++)
     {
-        response = spi1_transfer(0xFF); // same 0xFF always i.e. streams of 1's mosi held high while listening all the time
-        if (!(response & 0x80))         // top bit is 0 means a real response byte
+        r1 = spi1_transfer(0xFF); // same 0xFF always i.e. streams of 1's mosi held high while listening all the time
+        if (!(r1 & 0x80))         // top bit is 0 means a real r1 byte
         {
-            return response;
+            return r1;
         }
     }
     return 0xFF; // timeout card never answered
 }
-// a healthy response is usually 0x01 (just idle) during init, and 0x00 once ready
+// a healthy r1 is usually 0x01 (just idle) during init, and 0x00 once ready
 
 // cmd0 is go to ideal state , first real command , crc to be checked which is fixed constant 0x95
 uint8_t sd_cmd0(void)
 {
-    uint8_t resp;
+    uint8_t r1;
     for (int i = 0; i < 10; i++) // sending again & again as cmd0 may or may not register if sent only once
     {
         cs_select();                          // talking to card cs low
         sd_send_command(0, 0x00000000, 0x95); // cmd0 + crc which is 0x95 constant for CMD 0 always it comes precomputed
-        resp = sd_read_r1();                  // read reply after sending cmd0
+        r1 = sd_read_r1();                    // read reply after sending cmd0
         cs_deselect();                        // cs is high after exchange
         spi1_transfer(0xFF);                  // trailing bits just to register the cs high and complete whatever the internal housekeeping and release the miso line
-        if (resp == 0x01)                     // 0x01 means idle state, card is awake on the starting line
+        if (r1 == 0x01)                       // 0x01 means idle state, card is awake on the starting line
         {
             return 1;
         }
@@ -174,17 +181,19 @@ uint8_t sd_cmd0(void)
     return 0;
 }
 
+#define SD_CMD8_ARG 0x000001AAu // bits 11:8 = 2.7-3.6V, bits 7:0 = check pattern 0xAA
+#define SD_CMD8_CRC 0x87        // const crc byte of cmd8
 // the cmd8 byte responds in 1 status byte + 4 echo bytes
 uint8_t sd_cmd8(void)
 {
-    uint8_t resp1, echo[4];
+    uint8_t r1, echo[4];
 
     cs_select(); // cs must stay low during whole cmd8 convo
     sd_send_command(8, SD_CMD8_ARG, SD_CMD8_CRC);
     // 8 is the cmd number
     // arg is 0x000001AA in which 01 is the voltage range specified and AA is the random byte to be echoed back
     // cmd8_CRC is 0x87 , the constant crc for cmd8 except for cmd 0 and cmd 8 , every other cmd uses 0x01 i.e. dont care value
-    resp1 = sd_read_r1();
+    r1 = sd_read_r1();
     echo[0] = spi1_transfer(0xFF); // the 4 echo bytes (this longer reply is called R7)
     echo[1] = spi1_transfer(0xFF);
     echo[2] = spi1_transfer(0xFF); // this contains the voltage ans if R7
@@ -192,19 +201,19 @@ uint8_t sd_cmd8(void)
     cs_deselect();                 // pull cs high
     spi1_transfer(0xFF);           // trailing bits to confirm cs high
 
-    uart0_puts("resp1=");
-    uart0_puthex(resp1);
+    uart0_puts("r1=");
+    uart0_puthex(r1);
     uart0_puts(" echo=");
     for (int i = 0; i < 4; i++)
     {
         uart0_puthex(echo[i]);
     }
     uart0_puts("\r\n");
-    if (resp1 == 0xFF) // no answer at all
+    if (r1 == 0xFF) // no answer at all
     {
         return 0;
     }
-    if (resp1 & R1_ILLEGAL_COMMAND) // ancient card: doesn't know CMD8
+    if (r1 & R1_ILLEGAL_COMMAND) // ancient card: doesn't know CMD8
     {
         return 2;
     }
@@ -214,4 +223,48 @@ uint8_t sd_cmd8(void)
     }
 
     return 0; // answered, but token wrong
+}
+
+// ACMD41 - the command that actually brings the card to life
+// CMD55 is the one-shot prefix: "the next command is an application
+// command". It is consumed by that next command, so every ACMD41
+// attempt needs its own CMD55. ACMD41 answers 0x01 (busy, idle) until
+// the card's internal init finishes, then 0x00 (ready).
+#define SD_ACMD41_ARG 0x40000000u // bit 30 = HCS : host supports high capacity cards
+#define SD_ACMD41_RETRIES 200     // 200 * 10 ms = 2s ceiling
+#define SD_DUMMY_CRC 0x01         // crc is only enforced for cmd0 and cmd8 ; 0x01 is all crc bits 0 _ end bit 1.
+
+// application command 41
+uint8_t sd_acmd41(void)
+{
+    uint8_t r1;
+    for (int i = 0; i < SD_ACMD41_RETRIES; i++)
+    {
+        cs_select();                                   // must stay low for one exchange cmd55 + acmd41
+        sd_send_command(55, 0x00000000, SD_DUMMY_CRC); // cmd number 55, all arg bits 0 and dummy crc bit
+        r1 = sd_read_r1();
+
+        if (r1 > 0x01) // 0x01 is the repsonse when card is in idle state, anything except idle is error
+        {
+            cs_deselect();       // cs high
+            spi1_transfer(0xFF); // to register the cs high and clear out any trailing
+            return 0xFF;
+        }
+
+        sd_send_command(41, 0x40000000, SD_DUMMY_CRC);
+        r1 = sd_read_r1();
+        cs_deselect();       // cs high
+        spi1_transfer(0xFF); // to register the cs high and clear out any trailing
+
+        if (r1 == 0x00)
+        { // idle bit cleared -> card is ready
+            return 0;
+        }
+        if (r1 > 0x01)
+        { // any error bit set is  give up
+            return 0xFF;
+        }
+        delay_ms(10);
+    }
+    return 0xFF; // never finished in time
 }
