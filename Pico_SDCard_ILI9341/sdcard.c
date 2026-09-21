@@ -298,15 +298,28 @@ uint8_t sd_cmd58(void)
 
     if (!(ocr[0] & 0x80)) // bit 31 clear -> still powering up
     {
-        return 0; 
+        return 0;
     }
 
     if (ocr[0] & 0x40) // bit 30 set -> block addressing (SDHC)
     {
         return 1;
     }
-    else   // bit 30 clear -> byte addressing (SDSC)
+    else // bit 30 clear -> byte addressing (SDSC)
     {
-        return 2; 
+        return 2;
     }
+}
+
+// switch SPI1 from the 386 kHz init clock up to ~20.8 MHz
+// New SPI CLK  = SCLK / CPSDVSR * (1 + SCR)
+//   2 * (1 + 2) = 6  ->  20.83 MHz
+// SSE must be cleared before touching SSPCR0 / SSPCPSR
+void sd_set_clk_fast(void)
+{
+    SPI1_SSPCR1 &= ~(SPI1_SSPCR1_SSE); // stop the peripheral before changing clock
+    SPI1_SSPCPSR = 2;                  // CPSDVSR = 2 (even) Clock pre scale divisor
+    SPI1_SSPCR0 = 0x0207;              // scr = 2 serial clock rate 8 bit spi mode 0
+    SPI1_SSPCR1 |= SPI1_SSPCR1_SSE;    // re-enable
+    delay_ms(1);                    
 }

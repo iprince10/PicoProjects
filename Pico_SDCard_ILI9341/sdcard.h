@@ -13,5 +13,6 @@ uint8_t sd_cmd0(void);
 uint8_t sd_cmd8(void);
 uint8_t sd_acmd41(void);
 uint8_t sd_cmd58(void);
+void sd_set_clk_fast(void);
 
 #endif

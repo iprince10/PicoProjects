@@ -28,7 +28,6 @@ int main()
 {
     uart0_init();
     spi1_init();
-    // cs_init(); // after spi1 init always
     sd_dummy_clocks();
     led_init();
 
@@ -86,6 +85,9 @@ int main()
     {
         uart0_puts("CMD58 FAIL\r\n");
     }
+
+    sd_set_clk_fast();
+    uart0_puts("SPI1 CLK is 20.87 MHz now\r\n");
 
     while (1)
     {
