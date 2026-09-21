@@ -49,12 +49,12 @@
 void spi1_init(void)
 {
 
-    PAD_GPIO10 = 0x23; // SCK
-    PAD_GPIO11 = 0x23; // MOSI (TX)
-    PAD_GPIO12 = 0x63; // MISO (RX) - 0x63 = IE set to read the card
-    GPIO10_CTRL = GPIO_FUNC_SPI1;  //sck
-    GPIO11_CTRL = GPIO_FUNC_SPI1;  //tx mosi
-    GPIO12_CTRL = GPIO_FUNC_SPI1;  //rx miso
+    PAD_GPIO10 = 0x23;            // SCK
+    PAD_GPIO11 = 0x23;            // MOSI (TX)
+    PAD_GPIO12 = 0x63;            // MISO (RX) - 0x63 = IE set to read the card
+    GPIO10_CTRL = GPIO_FUNC_SPI1; // sck
+    GPIO11_CTRL = GPIO_FUNC_SPI1; // tx mosi
+    GPIO12_CTRL = GPIO_FUNC_SPI1; // rx miso
 
     CLK_PERI_CTRL |= CLK_PERI_CTRL_ENABLE; // enable clock , by default clock is gated for the spi1 peripheral
     RESETS_RESET &= ~(RESETS_RESET_SPI1);  // do a software reset and wait for reset done signal
@@ -68,7 +68,7 @@ void spi1_init(void)
     SPI1_SSPCR1 = SPI1_SSPCR1_SSE; // synchronous serial port enable
     delay_ms(100);
 
-    // cs init as plain sio 
+    // cs init as plain sio
     GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
     PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
     SIO_GPIO_OE_SET = (1u << 13);  // enable output
@@ -90,7 +90,7 @@ void cs_select(void)
 {
     SIO_GPIO_OUT_CLEAR = (1u << 13); // cs low is talking to the card
 }
-//makes cs high
+// makes cs high
 void cs_deselect(void)
 {
     SIO_GPIO_OUT_SET = (1u << 13); // cs high = done talking
@@ -122,7 +122,7 @@ void sd_dummy_clocks(void) // dummy clocks at startup
 }
 
 // sending command , commands consists of 6 bytes:-
-// first byte is start bit + cmd number 
+// first byte is start bit + cmd number
 // next four bytes are argument bytes send in little endian , MSB first in lowest address
 // sixth byte is 7 bit CRC + 1 bit of 1 at the end as a end marker
 void sd_send_command(uint8_t cmd, uint32_t arg, uint8_t crc)
@@ -201,14 +201,15 @@ uint8_t sd_cmd8(void)
     cs_deselect();                 // pull cs high
     spi1_transfer(0xFF);           // trailing bits to confirm cs high
 
-    uart0_puts("r1=");
-    uart0_puthex(r1);
-    uart0_puts(" echo=");
-    for (int i = 0; i < 4; i++)
-    {
-        uart0_puthex(echo[i]);
-    }
-    uart0_puts("\r\n");
+    // Debugging HEX block of CMD8 Response
+    // uart0_puts("r1=");
+    // uart0_puthex(r1);
+    // uart0_puts(" echo=");
+    // for (int i = 0; i < 4; i++)
+    // {
+    //     uart0_puthex(echo[i]);
+    // }
+    // uart0_puts("\r\n");
     if (r1 == 0xFF) // no answer at all
     {
         return 0;
@@ -267,4 +268,45 @@ uint8_t sd_acmd41(void)
         delay_ms(10);
     }
     return 0xFF; // never finished in time
+}
+
+// CMD58 - read the OCR (Operating Conditions Register)
+// Reply is R3: R1 + 4 OCR bytes (MSB first).
+//   OCR bit 31 = power-up busy : 1 = fully powered, 0 = still warming up
+//   OCR bit 30 = CCS           : 1 = block addressing (SDHC/SDXC)
+//   CCS : Card Capacity Status   0 = byte addressing (SDSC, old cards)
+//   OCR bits 23:15 = accepted voltage window
+
+uint8_t sd_cmd58(void)
+{
+    uint8_t r1, ocr[4];
+
+    cs_select();                                   // cs low
+    sd_send_command(58, 0x00000000, SD_DUMMY_CRC); // cmd number 55, no arg bits all zeroes, dont care or dummy crc
+    r1 = sd_read_r1();
+    ocr[0] = spi1_transfer(0xFF); // OCR bits 31:24: busy + CCS are here at 31 and 30 bit
+    ocr[1] = spi1_transfer(0xFF); // OCR bits 23:16
+    ocr[2] = spi1_transfer(0xFF); // OCR bits 15:8
+    ocr[3] = spi1_transfer(0xFF); // OCR bits 7:0
+    cs_deselect();                // cs high
+    spi1_transfer(0xFF);          // confirm cs
+
+    if (r1 != 0x00) // command itself failed
+    {
+        return 0;
+    }
+
+    if (!(ocr[0] & 0x80)) // bit 31 clear -> still powering up
+    {
+        return 0; 
+    }
+
+    if (ocr[0] & 0x40) // bit 30 set -> block addressing (SDHC)
+    {
+        return 1;
+    }
+    else   // bit 30 clear -> byte addressing (SDSC)
+    {
+        return 2; 
+    }
 }

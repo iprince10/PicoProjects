@@ -12,5 +12,6 @@ uint8_t sd_read_r1(void);
 uint8_t sd_cmd0(void);
 uint8_t sd_cmd8(void);
 uint8_t sd_acmd41(void);
+uint8_t sd_cmd58(void);
 
 #endif

@@ -61,14 +61,30 @@ int main()
 
     // cmd55 + acmd41
     uart0_puts("CMD55 + ACMD41....\r\n");
-    uint8_t r3 = sd_acmd41();
-    if (r3 == 0)
+    if (sd_acmd41() == 0)
     {
         uart0_puts("ACMD41 Ok - card ready\r\n");
     }
     else
     {
         uart0_puts("ACMD41 FAIL\r\n");
+    }
+
+    // cmd58
+    uart0_puts("CMD58....\r\n");
+    uint8_t r3 = sd_cmd58();
+
+    if (r3 == 1)
+    {
+        uart0_puts("CMD58 Ok - block addressing (SDHC/SDXC)\r\n");
+    }
+    else if (r3 == 2)
+    {
+        uart0_puts("CMD58 - byte addressing (SDSC)\r\n");
+    }
+    else
+    {
+        uart0_puts("CMD58 FAIL\r\n");
     }
 
     while (1)
