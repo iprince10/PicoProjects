@@ -87,7 +87,7 @@ int main()
     }
 
     sd_set_clk_fast();
-    uart0_puts("SPI1 CLK is 20.87 MHz now\r\n");
+    uart0_puts("SPI1 CLK is 12.5 MHz now\r\n");
 
     //cmd17 sd-read-block
     static uint8_t buf[512]; // static: no large buffers on the stack

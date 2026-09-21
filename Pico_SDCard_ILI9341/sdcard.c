@@ -313,13 +313,13 @@ uint8_t sd_cmd58(void)
 
 // switch SPI1 from the 386 kHz init clock up to ~20.8 MHz
 // New SPI CLK  = SCLK / CPSDVSR * (1 + SCR)
-//   2 * (1 + 2) = 6  ->  20.83 MHz
+// e.g. : 2 * (1 + 4) = 10  ->  12.5 MHz
 // SSE must be cleared before touching SSPCR0 / SSPCPSR
 void sd_set_clk_fast(void)
 {
     SPI1_SSPCR1 &= ~(SPI1_SSPCR1_SSE); // stop the peripheral before changing clock
-    SPI1_SSPCPSR = 2;                  // CPSDVSR = 2 (even) Clock pre scale divisor
-    SPI1_SSPCR0 = 0x0207;              // scr = 2 serial clock rate 8 bit spi mode 0
+    SPI1_SSPCPSR = 2;                  // CPSDVSR should be (even) Clock pre scale divisor
+    SPI1_SSPCR0 = 0x0407;              // scr be even too , serial clock rate 8 bit spi mode 0
     SPI1_SSPCR1 |= SPI1_SSPCR1_SSE;    // re-enable
     delay_ms(1);
 }
@@ -346,7 +346,18 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
         return 0xFF;
     }
 
-    // wait for the start token: card streams 0xFF until the data is ready
+    // uint64_t start = read_timer();
+    // token = 0xFF;
+    // while ((read_timer() - start) < 100000) // 100 ms worst-case Nac
+    // {
+    //     token = spi1_transfer(0xFF);
+    //     if (token != 0xFF)
+    //     {
+    //         break;
+    //     }
+    // }
+
+    //wait for the start token: card streams 0xFF until the data is ready
     token = 0xFF;
     for (int i = 0; i < SD_TOKEN_TIMEOUT; i++)
     {
