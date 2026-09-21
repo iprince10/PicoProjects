@@ -321,5 +321,56 @@ void sd_set_clk_fast(void)
     SPI1_SSPCPSR = 2;                  // CPSDVSR = 2 (even) Clock pre scale divisor
     SPI1_SSPCR0 = 0x0207;              // scr = 2 serial clock rate 8 bit spi mode 0
     SPI1_SSPCR1 |= SPI1_SSPCR1_SSE;    // re-enable
-    delay_ms(1);                    
+    delay_ms(1);
+}
+
+// CMD17 - read one 512-byte block
+// Reply: R1, then a variable gap, then token 0xFE, then 512 data bytes,
+// then 2 CRC16 bytes (discarded). CS stays low across the whole thing.
+// On SDHC the argument is a plain block index (CCS=1 from CMD58).
+#define SD_TOKEN_START_BLOCK 0xFE
+#define SD_TOKEN_TIMEOUT 2000 // bytes worth polling before timeout
+#define SD_BLOCK_SIZE 512
+
+// buf must hold at least 512 bytes. returns 0 on success, 0xFF on failure.
+uint8_t sd_read_block(uint32_t block, uint8_t *buf)
+{
+    uint8_t r1, token;
+    cs_select(); // cs must stay low for whole exchange here
+    sd_send_command(17, block, SD_DUMMY_CRC);
+    r1 = sd_read_r1();
+    if (r1 != 0x00)
+    {
+        cs_deselect();
+        spi1_transfer(0xFF);
+        return 0xFF;
+    }
+
+    // wait for the start token: card streams 0xFF until the data is ready
+    token = 0xFF;
+    for (int i = 0; i < SD_TOKEN_TIMEOUT; i++)
+    {
+        token = spi1_transfer(0xFF);
+        if (token != 0xFF) // something arrived
+        {
+            break;
+        }
+    }
+    if (token != SD_TOKEN_START_BLOCK) // 0xFE expected; 0x0X = data error token
+    {
+        cs_deselect();
+        spi1_transfer(0xFF);
+        return 0xFF;
+    }
+
+    for (int i = 0; i < SD_BLOCK_SIZE; i++)
+    {
+        buf[i] = spi1_transfer(0xFF); // the payload - 512 bytes
+    }
+    spi1_transfer(0xFF); // CRC16 high - not verified & ignored
+    spi1_transfer(0xFF); // CRC16 low  - not verified & ignored
+
+    cs_deselect();
+    spi1_transfer(0xFF);
+    return 0;
 }
