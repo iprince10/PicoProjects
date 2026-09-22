@@ -136,7 +136,7 @@ void sd_send_command(uint8_t cmd, uint32_t arg, uint8_t crc)
 }
 
 // the first command & repsonse defines
-#define SD_R1_TIMEOUT 2000      // time- out value after sending init command
+#define SD_R1_TIMEOUT 2000     // time- out value after sending init command
 #define R1_IDLE_STATE (1u << 0) // 1 = card still in idle (not ready)
 #define R1_ERASE_RESET (1u << 1)
 #define R1_ILLEGAL_COMMAND (1u << 2) // 1 = card doesn't know that command
@@ -319,7 +319,7 @@ void sd_set_clk_fast(void)
 {
     SPI1_SSPCR1 &= ~(SPI1_SSPCR1_SSE); // stop the peripheral before changing clock
     SPI1_SSPCPSR = 2;                  // CPSDVSR should be (even) Clock pre scale divisor
-    SPI1_SSPCR0 = 0x0407;              // scr be even too , serial clock rate 8 bit spi mode 0
+    SPI1_SSPCR0 = 0x0307;              // scr be even too , serial clock rate 8 bit spi mode 0
     SPI1_SSPCR1 |= SPI1_SSPCR1_SSE;    // re-enable
     delay_ms(1);
 }
@@ -329,7 +329,7 @@ void sd_set_clk_fast(void)
 // then 2 CRC16 bytes (discarded). CS stays low across the whole thing.
 // On SDHC the argument is a plain block index (CCS=1 from CMD58).
 #define SD_TOKEN_START_BLOCK 0xFE
-#define SD_TOKEN_TIMEOUT 2000 // bytes worth polling before timeout
+#define SD_TOKEN_TIMEOUT 20000 // bytes worth polling before timeout
 #define SD_BLOCK_SIZE 512
 
 // buf must hold at least 512 bytes. returns 0 on success, 0xFF on failure.
@@ -346,27 +346,27 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
         return 0xFF;
     }
 
-    // uint64_t start = read_timer();
-    // token = 0xFF;
-    // while ((read_timer() - start) < 100000) // 100 ms worst-case Nac
-    // {
-    //     token = spi1_transfer(0xFF);
-    //     if (token != 0xFF)
-    //     {
-    //         break;
-    //     }
-    // }
-
-    //wait for the start token: card streams 0xFF until the data is ready
+    uint64_t start = read_timer();
     token = 0xFF;
-    for (int i = 0; i < SD_TOKEN_TIMEOUT; i++)
+    while ((read_timer() - start) < 100000) // 100 ms worst-case Nac
     {
         token = spi1_transfer(0xFF);
-        if (token != 0xFF) // something arrived
+        if (token != 0xFF)
         {
             break;
         }
     }
+
+    //wait for the start token: card streams 0xFF until the data is ready
+    // token = 0xFF;
+    // for (int i = 0; i < SD_TOKEN_TIMEOUT; i++)
+    // {
+    //     token = spi1_transfer(0xFF);
+    //     if (token != 0xFF) // something arrived
+    //     {
+    //         break;
+    //     }
+    // }
     if (token != SD_TOKEN_START_BLOCK) // 0xFE expected; 0x0X = data error token
     {
         cs_deselect();
