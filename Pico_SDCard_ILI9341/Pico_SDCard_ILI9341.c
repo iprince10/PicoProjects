@@ -5,6 +5,7 @@
 #include "uart.h"
 #include "bitmap.h"
 #include "sdcard.h"
+#include "fat32.h"
 
 #define IO_BANK0_BASE 0x40014000u
 
@@ -109,7 +110,7 @@ int main()
         uart0_puts("CMD17 FAIL\r\n");
     }
 
-    // read-twice integrity test 
+    // read-twice integrity test
     uart0_puts("Integrity test....\r\n");
     if (sd_integrity_test(0, 300) == 0)
     {
@@ -118,6 +119,29 @@ int main()
     else
     {
         uart0_puts("Integrity FAIL - data path not clean at this clock\r\n");
+    }
+
+    // MBR Parser
+    // block 0 is the partition table. the start LBA it hands back is already
+    // a block number,
+    static uint8_t mbr[512];
+    uint32_t part_start = 0;
+    uint32_t part_size = 0;
+
+    uart0_puts("MBR - reading block 0....\r\n");
+    if (sd_read_block(0, mbr) != 0)
+    {
+        uart0_puts("MBR FAIL - could not read block 0\r\n");
+    }
+    else if (sd_mbr_parse(mbr, &part_start, &part_size) == 0)
+    {
+        uart0_puts("MBR Ok - filesystem starts at block ");
+        uart0_putnum(part_start);
+        uart0_puts("\r\n");
+    }
+    else
+    {
+        uart0_puts("MBR FAIL - no usable partition table\r\n");
     }
 
     while (1)
