@@ -46,6 +46,7 @@ void uart1_putc(char c);
 char uart1_getc(void);
 void uart1_write_bytes(const uint8_t *data, uint8_t len);
 int uart1_has_data(void);
+void uart0_puthex(uint8_t byte);
 
 void uart0_init(void)
 {

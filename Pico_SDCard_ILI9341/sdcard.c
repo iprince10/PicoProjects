@@ -68,23 +68,13 @@ void spi1_init(void)
     SPI1_SSPCR1 = SPI1_SSPCR1_SSE; // synchronous serial port enable
     delay_ms(100);
 
+    // remember to make cs of spi1 as gpio cause we need to manually make it low all the time
     // cs init as plain sio
     GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
     PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
     SIO_GPIO_OE_SET = (1u << 13);  // enable output
     SIO_GPIO_OUT_SET = (1u << 13); // idle cs = high means card ignored
 }
-
-// remember to make cs of spi1 as gpio cause we need to manually make it low all the time
-
-// void cs_init(void)
-// {
-//     GPIO13_CTRL = GPIO_FUNC_SIO;   // cs gpio func as sio not spi1
-//     PAD_GPIO13 &= ~(1u << 7);      // clear disable output bit although it is clear by default
-//     SIO_GPIO_OE_SET = (1u << 13);  // enable output
-//     SIO_GPIO_OUT_SET = (1u << 13); // idle cs = high means card ignored
-// }
-
 // makes cs low
 void cs_select(void)
 {
@@ -136,7 +126,7 @@ void sd_send_command(uint8_t cmd, uint32_t arg, uint8_t crc)
 }
 
 // the first command & repsonse defines
-#define SD_R1_TIMEOUT 2000     // time- out value after sending init command
+#define SD_R1_TIMEOUT 2000      // time- out value after sending init command
 #define R1_IDLE_STATE (1u << 0) // 1 = card still in idle (not ready)
 #define R1_ERASE_RESET (1u << 1)
 #define R1_ILLEGAL_COMMAND (1u << 2) // 1 = card doesn't know that command
@@ -311,7 +301,7 @@ uint8_t sd_cmd58(void)
     }
 }
 
-// switch SPI1 from the 386 kHz init clock up to ~20.8 MHz
+// switch SPI1 from the 386 kHz init clock up to ~12.5 MHz
 // New SPI CLK  = SCLK / CPSDVSR * (1 + SCR)
 // e.g. : 2 * (1 + 4) = 10  ->  12.5 MHz
 // SSE must be cleared before touching SSPCR0 / SSPCPSR
@@ -319,7 +309,7 @@ void sd_set_clk_fast(void)
 {
     SPI1_SSPCR1 &= ~(SPI1_SSPCR1_SSE); // stop the peripheral before changing clock
     SPI1_SSPCPSR = 2;                  // CPSDVSR should be (even) Clock pre scale divisor
-    SPI1_SSPCR0 = 0x0407;              // scr can be anything between 1-255 , serial clock rate 8 bit spi mode 1
+    SPI1_SSPCR0 = 0x0407;              // scr can be anything between 1-255 , serial clock rate 8 bit spi mode0
     SPI1_SSPCR1 |= SPI1_SSPCR1_SSE;    // re-enable
     delay_ms(1);
 }
@@ -345,7 +335,7 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
         return 0xFF;
     }
 
-    //wait for the start token: card streams 0xFF until the data is ready
+    // wait for the start token: card streams 0xFF until the data is ready
     uint64_t start = read_timer();
     token = 0xFF;
     while ((read_timer() - start) < 100000) // 100 ms worst-case Nac
@@ -374,4 +364,67 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
     cs_deselect();
     spi1_transfer(0xFF);
     return 0;
+}
+
+// read each block twice and compare all the 512 bytes
+uint8_t sd_integrity_test(uint32_t first, int count)
+{
+    static uint8_t blkA[SD_BLOCK_SIZE]; // first read of block
+    static uint8_t blkB[SD_BLOCK_SIZE]; // second read of block
+    uint32_t fails = 0;                 // total failures, read or mismatch
+    int shown = 0;                      // showing count
+
+
+    for (int w = 0; w < count; w++)
+    {
+        uint32_t blk = first + w; // block number testing right now
+
+        // two reads of a same block , read failure block
+        if (sd_read_block(blk, blkA) != 0 || sd_read_block(blk, blkB) != 0)
+        {
+            fails++;
+            if (shown < 10)
+            {
+                uart0_puts("READ FAIL at block ");
+                uart0_putnum(blk);
+                uart0_puts("\r\n");
+                shown++;
+            }
+            continue;
+        }
+
+        // compare all the 512 bytes of the two reads , block read compare block
+        for (int b = 0; b < SD_BLOCK_SIZE; b++)
+        {
+            if (blkA[b] != blkB[b]) // same block must be byte identical
+            {
+                fails++;
+                if (shown < 10)
+                {
+                    uart0_puts("MISMATCH Block ");
+                    uart0_putnum(blk);
+                    uart0_puts(" byte ");
+                    uart0_putnum(b);
+                    uart0_puts(" : ");
+                    uart0_puthex(blkA[b]); // value from read A
+                    uart0_puthex(blkB[b]); // value from read B
+                    uart0_puts("\r\n");
+                    shown++;
+                }
+                break; // first bad byte is enough for this block
+            }
+        }
+    }
+
+    uart0_puts("integrity test done - blocks ");
+    uart0_putnum(count);
+    uart0_puts(", failures ");
+    uart0_putnum(fails);
+    uart0_puts("\r\n");
+
+    if (fails == 0)
+    {
+        return 0;
+    }
+    return 0xFF;
 }

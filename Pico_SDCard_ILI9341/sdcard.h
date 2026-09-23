@@ -15,5 +15,6 @@ uint8_t sd_acmd41(void);
 uint8_t sd_cmd58(void);
 void sd_set_clk_fast(void);
 uint8_t sd_read_block(uint32_t block, uint8_t *buf);
+uint8_t sd_integrity_test(uint32_t first, int count);
 
 #endif

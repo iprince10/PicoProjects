@@ -92,32 +92,32 @@ int main()
     // cmd17 sd-read-block
     static uint8_t buf[512]; // static: no large buffers on the stack
     uart0_puts("CMD17 - reading block 0....\r\n");
-    for (int i = 0; i <= 300; i++)
+
+    if (sd_read_block(0, buf) == 0)
     {
-        if (sd_read_block(i, buf) == 0)
+        if (buf[510] == 0x55 && buf[511] == 0xAA)
         {
-            if (buf[510] == 0x55 && buf[511] == 0xAA)
-            {
-                uart0_puts("CMD17 Ok - MBR signature 0x55AA found : ");
-                uart0_putnum(i);
-                uart0_puts("\r\n");
-                delay_ms(1);
-            }
-            else
-            {
-                uart0_puts("CMD17 - read ok, no MBR signature : ");
-                uart0_putnum(i);
-                uart0_puts("\r\n");
-                delay_ms(1);
-            }
+            uart0_puts("CMD17 Ok - MBR signature 0x55AA found\r\n");
         }
         else
         {
-            uart0_puts("CMD17 FAIL : ");
-            uart0_putnum(i);
-            uart0_puts("\r\n");
-            delay_ms(1);
+            uart0_puts("CMD17 - read ok, no MBR signature\r\n");
         }
+    }
+    else
+    {
+        uart0_puts("CMD17 FAIL\r\n");
+    }
+
+    // read-twice integrity test 
+    uart0_puts("Integrity test....\r\n");
+    if (sd_integrity_test(0, 300) == 0)
+    {
+        uart0_puts("Integrity Ok - 300 blocks read twice, all identical\r\n");
+    }
+    else
+    {
+        uart0_puts("Integrity FAIL - data path not clean at this clock\r\n");
     }
 
     while (1)
