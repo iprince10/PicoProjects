@@ -89,23 +89,32 @@ int main()
     sd_set_clk_fast();
     uart0_puts("SPI1 CLK is 12.5 MHz now\r\n");
 
-    //cmd17 sd-read-block
+    // cmd17 sd-read-block
     static uint8_t buf[512]; // static: no large buffers on the stack
     uart0_puts("CMD17 - reading block 0....\r\n");
-    if (sd_read_block(0, buf) == 0)
+    for (int i = 0; i <= 300; i++)
     {
-        if (buf[510] == 0x55 && buf[511] == 0xAA)
+        if (sd_read_block(i, buf) == 0)
         {
-            uart0_puts("CMD17 Ok - MBR signature 0x55AA found\r\n");
+            if (buf[510] == 0x55 && buf[511] == 0xAA)
+            {
+                uart0_puts("CMD17 Ok - MBR signature 0x55AA found ");
+                uart0_putnum(i);
+                delay_ms(10);
+            }
+            else
+            {
+                uart0_puts("CMD17 - read ok, no MBR signature\r\n");
+                uart0_putnum(i);
+                delay_ms(10);
+            }
         }
         else
         {
-            uart0_puts("CMD17 - read ok, no MBR signature\r\n");
+            uart0_puts("CMD17 FAIL\r\n");
+            uart0_putnum(i);
+            delay_ms(10);
         }
-    }
-    else
-    {
-        uart0_puts("CMD17 FAIL\r\n");
     }
 
     while (1)

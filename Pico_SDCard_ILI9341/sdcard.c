@@ -319,7 +319,7 @@ void sd_set_clk_fast(void)
 {
     SPI1_SSPCR1 &= ~(SPI1_SSPCR1_SSE); // stop the peripheral before changing clock
     SPI1_SSPCPSR = 2;                  // CPSDVSR should be (even) Clock pre scale divisor
-    SPI1_SSPCR0 = 0x0307;              // scr be even too , serial clock rate 8 bit spi mode 0
+    SPI1_SSPCR0 = 0x0407;              // scr can be anything between 1-255 , serial clock rate 8 bit spi mode 1
     SPI1_SSPCR1 |= SPI1_SSPCR1_SSE;    // re-enable
     delay_ms(1);
 }
@@ -329,7 +329,6 @@ void sd_set_clk_fast(void)
 // then 2 CRC16 bytes (discarded). CS stays low across the whole thing.
 // On SDHC the argument is a plain block index (CCS=1 from CMD58).
 #define SD_TOKEN_START_BLOCK 0xFE
-#define SD_TOKEN_TIMEOUT 20000 // bytes worth polling before timeout
 #define SD_BLOCK_SIZE 512
 
 // buf must hold at least 512 bytes. returns 0 on success, 0xFF on failure.
@@ -346,6 +345,7 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
         return 0xFF;
     }
 
+    //wait for the start token: card streams 0xFF until the data is ready
     uint64_t start = read_timer();
     token = 0xFF;
     while ((read_timer() - start) < 100000) // 100 ms worst-case Nac
@@ -357,16 +357,6 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
         }
     }
 
-    //wait for the start token: card streams 0xFF until the data is ready
-    // token = 0xFF;
-    // for (int i = 0; i < SD_TOKEN_TIMEOUT; i++)
-    // {
-    //     token = spi1_transfer(0xFF);
-    //     if (token != 0xFF) // something arrived
-    //     {
-    //         break;
-    //     }
-    // }
     if (token != SD_TOKEN_START_BLOCK) // 0xFE expected; 0x0X = data error token
     {
         cs_deselect();
