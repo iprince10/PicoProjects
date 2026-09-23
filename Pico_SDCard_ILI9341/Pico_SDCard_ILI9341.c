@@ -98,22 +98,25 @@ int main()
         {
             if (buf[510] == 0x55 && buf[511] == 0xAA)
             {
-                uart0_puts("CMD17 Ok - MBR signature 0x55AA found ");
+                uart0_puts("CMD17 Ok - MBR signature 0x55AA found : ");
                 uart0_putnum(i);
-                delay_ms(10);
+                uart0_puts("\r\n");
+                delay_ms(1);
             }
             else
             {
-                uart0_puts("CMD17 - read ok, no MBR signature\r\n");
+                uart0_puts("CMD17 - read ok, no MBR signature : ");
                 uart0_putnum(i);
-                delay_ms(10);
+                uart0_puts("\r\n");
+                delay_ms(1);
             }
         }
         else
         {
-            uart0_puts("CMD17 FAIL\r\n");
+            uart0_puts("CMD17 FAIL : ");
             uart0_putnum(i);
-            delay_ms(10);
+            uart0_puts("\r\n");
+            delay_ms(1);
         }
     }
 
