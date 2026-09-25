@@ -144,6 +144,28 @@ int main()
         uart0_puts("MBR FAIL - no usable partition table\r\n");
     }
 
+    // BPB 
+    // block part_start is the VBR. its BPB gives the FAT32 geometry, which
+    // every later read depends on. no point going on if this fails.
+    static uint8_t vbr[512];
+    fat_geom_t geom;
+
+    uart0_puts("BPB - reading block ");
+    uart0_putnum(part_start);
+    uart0_puts("....\r\n");
+    if (sd_read_block(part_start, vbr) != 0)
+    {
+        uart0_puts("BPB FAIL - could not read the VBR\r\n");
+    }
+    else if (fat32_parse_bpb(vbr, part_start, &geom) == 0)
+    {
+        uart0_puts("BPB Ok - FAT32 geometry read\r\n");
+    }
+    else
+    {
+        uart0_puts("BPB FAIL - not a usable FAT32 boot sector\r\n");
+    }
+
     while (1)
     {
         SIO_GPIO_OUT_XOR = GPIO25;

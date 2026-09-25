@@ -3,7 +3,6 @@
 
 void spi1_init(void);
 uint8_t spi1_transfer(uint8_t data);
-// void cs_init(void);
 void cs_select(void);
 void cs_deselect(void);
 void sd_dummy_clocks(void);
