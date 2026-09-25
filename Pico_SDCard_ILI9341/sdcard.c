@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "timer.h"
 #include "uart.h"
+#include "sdcard.h"
 
 #define SIO_BASE 0xd0000000u
 #define SIO_GPIO_OE (*(volatile uint32_t *)(SIO_BASE + 0x020))
