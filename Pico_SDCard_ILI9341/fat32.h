@@ -22,4 +22,6 @@ typedef struct
 
 uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g);
 
+uint8_t fat32_list_root(const fat_geom_t *g);
+
 #endif

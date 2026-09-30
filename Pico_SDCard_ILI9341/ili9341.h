@@ -17,4 +17,3 @@ void format_distance(char *buff, uint32_t distance);
 void display_init_log(void);
 
 #endif
-

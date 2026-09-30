@@ -326,8 +326,8 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
 {
     uint8_t r1, token;
     cs_select(); // cs must stay low for whole exchange here
-    sd_send_command(17, block, SD_DUMMY_CRC);
-    r1 = sd_read_r1();
+    sd_send_command(17, block, SD_DUMMY_CRC); // cmd number 17, block number , dont care or dummy crc
+    r1 = sd_read_r1();  // poll the miso with timeout , get an 0x00 it is a valid start marker
     if (r1 != 0x00)
     {
         cs_deselect();
@@ -373,7 +373,6 @@ uint8_t sd_integrity_test(uint32_t first, int count)
     static uint8_t blkB[SD_BLOCK_SIZE]; // second read of block
     uint32_t fails = 0;                 // total failures, read or mismatch
     int shown = 0;                      // showing count
-
 
     for (int w = 0; w < count; w++)
     {
