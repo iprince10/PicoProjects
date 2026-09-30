@@ -11,6 +11,7 @@ static uint32_t mbr_read_le32(const uint8_t *b)
     return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
 }
 
+// pass the type byte here and it returns the format type of the card
 static void mbr_show_type(uint8_t type)
 {
     switch (type)
@@ -52,18 +53,38 @@ static void mbr_show_type(uint8_t type)
 // MBR partition table
 // Block 0 is the Master Boot Record. Fixed layout, independent of any
 // filesystem:
-//   bytes 0..445   : bootstrap code, ignored
-//   bytes 446..509 : four 16-byte partition entries
-//   bytes 510..511 : signature 0x55 0xAA
-// each 16-byte entry:
-//   +0  boot flag  (0x80 bootable / 0x00 not)
-//   +1  start CHS  (3 bytes) - obsolete, ignored
-//   +4  partition TYPE  <- what filesystem
-//   +5  end CHS    (3 bytes) - obsolete, ignored
-//   +8  start LBA  (4 bytes, little endian)
-//   +12 size        (4 bytes, little endian, in sectors)
+/*
+Block 0 is the Master Boot Record (MBR) — the one sector on the disk
+with fixed layout by convention independent of any filesystem:
+Its structure:
+| OFFSET  | SIZE  | CONTENTS                                      |
+| ------- | ----- | ----------------------------------------------|
+| 0–445   | 446 B | bootstrap code — leftover from the DOS era,   |
+|         |       | ignore it                                     |
+| 446–461 | 16 B  | partition entry 1                             |
+| 462–477 | 16 B  | partition entry 2                             |
+| 478–493 | 16 B  | partition entry 3                             |
+| 494–509 | 16 B  | partition entry 4                             |
+| 510–511 | 2 B   | signature 0x55 0xAA — the two bytes being     |
+|         |       | checked                                       |
+------------------------------------------------------------------
+446 + 4 × 16 = 510
+So the four partition entries tile exactly up to the signature.
+The MBR is a tiny index: it describes where partitions live, not what's inside them. It is filesystem-agnostic — an MBR can point at FAT32, exFAT,NTFS, Linux ext4, anything.
+Within each partition entry, fixed offsets apply:
+| Offset in entry | Size | Meaning                                      |
+| --------------- | ---- | -------------------------------------------- |
+| +0              | 1 B  | boot flag: 0x80 = bootable, 0x00 = not      |
+| +1 … +3         | 3 B  | starting CHS address — obsolete              |
+| +4              | 1 B  | partition type — what you want #1            |
+| +5 … +7         | 3 B  | ending CHS address — obsolete                |
+| +8 … +11        | 4 B  | LBA of first sector — what you want #2       |
+| +12 … +15       | 4 B  | sector count — what you want #3              |
+The three important fields are:
+#1 Partition type, #2 LBA of first sector, #3 Sector count
 // empty slots have type 0x00. there is no rule the partition sits in
 // slot 0, so all four get scanned.
+*/
 #define SD_MBR_PART_OFFSET 446
 #define SD_MBR_PART_SIZE 16
 #define SD_MBR_PART_COUNT 4
@@ -84,12 +105,12 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
     uint8_t chosen_type = 0;
     uint8_t found = 0;
 
-    if (mbr[SD_MBR_SIG_OFFSET] != 0x55 || mbr[SD_MBR_SIG_OFFSET + 1] != 0xAA)
+    if (mbr[SD_MBR_SIG_OFFSET] != 0x55 || mbr[SD_MBR_SIG_OFFSET + 1] != 0xAA)  // mbr eof signature check 0x55 & 0xAA
     {
         uart0_puts("MBR: no 0x55AA signature, not a partition table\r\n");
-        return 0xFF;
+        return 0xFF; 
     }
-    for (int i = 0; i < SD_MBR_PART_COUNT; i++)
+    for (int i = 0; i < SD_MBR_PART_COUNT; i++)  
     {
         // entry i sits 16 bytes further along each time
         uint8_t *entry = mbr + SD_MBR_PART_OFFSET + (i * SD_MBR_PART_SIZE); // entry is a pointer to the memory location inside the mbr block
@@ -107,7 +128,7 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
         uart0_puts(": Type 0x");
         uart0_puthex(type);
         uart0_puts(" ");
-        mbr_show_type(type);
+        mbr_show_type(type); 
         uart0_puts("\r\nStart : ");
         uart0_putnum(start);
         uart0_puts(" Size : ");
@@ -120,7 +141,7 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
 
         if (!found) // first usable entry wins, we have not looked for more
         {
-            *part_start = start;
+            *part_start = start;  // partiiton start i.e. 
             *part_size = size;
             chosen_type = type;
             found = 1;
@@ -156,6 +177,7 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
 }
 
 // BPB (BIOS Parameter Block)
+// Block 2048  is the VBR ,the filesystem's own block 0
 // The VBR sits at part_start (MBR gave 2048). Its first bytes are the BPB , all little Endian same as MBR entries
 // offsets from the top of the VBR sector :
 // 11  bytes per sector    (2) usually 512
@@ -198,7 +220,7 @@ uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g)
         return 0xFF;
     }
 
-    // raw fields
+    // raw fields put the values into the struct
     g->part_start = part_start;
     g->bytes_per_sector = bpb_read_le16(bpb + FAT_BPB_BYTES_PER_SECT);
     g->sectors_per_cluster = bpb[FAT_BPB_SEC_PER_CLUS];
@@ -241,25 +263,27 @@ uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g)
     // ---- report ----
     uart0_puts("BPB: bytes/sector ");
     uart0_putnum(g->bytes_per_sector);
-    uart0_puts(", sectors/cluster ");
+    uart0_puts(", Sectors/cluster ");
     uart0_putnum(g->sectors_per_cluster);
     uart0_puts(" (");
     uart0_putnum((uint32_t)g->sectors_per_cluster * g->bytes_per_sector);
-    uart0_puts(" byte clusters)\r\n");
+    uart0_puts(" byte per clusters)\r\n");
 
-    uart0_puts("reserved ");
+    uart0_puts("Reserved ");
     uart0_putnum(g->reserved_sectors);
     uart0_puts(", FATs ");
     uart0_putnum(g->num_fats);
-    uart0_puts(", sectors/FAT ");
+    uart0_puts(", Sectors/FAT ");
     uart0_putnum(g->sectors_per_fat);
     uart0_puts("\r\n");
 
-    uart0_puts("total sectors ");
+    uart0_puts("Total sectors ");
     uart0_putnum(g->total_sectors);
     uart0_puts(" (");
     uart0_putnum(g->total_sectors / 2048u); // divide first, same reason as MBR
-    uart0_puts(" MiB)\r\n");
+    // divide by 2048 because a sectors contains 512 bytes and one Kib contains 1024 bytes or 2 sectors
+    // and 1 Mib contains 1024 Kib , thus for Mebibytes, divide the sectors by 2048
+    uart0_puts(" MebiByte)\r\n");
 
     uart0_puts("FAT starts at block ");
     uart0_putnum(g->fat_start);
@@ -267,9 +291,9 @@ uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g)
     uart0_putnum(g->data_start);
     uart0_puts("\r\n");
 
-    uart0_puts("clusters ");
+    uart0_puts("Clusters ");
     uart0_putnum(g->cluster_count);
-    uart0_puts(", root cluster ");
+    uart0_puts(", Root cluster ");
     uart0_putnum(g->root_cluster);
     uart0_puts("\r\n");
 
@@ -652,9 +676,7 @@ uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root dire
 
         /*
         The end-of-chain test, bit by bit
-
         What the function can return, per the FAT32 spec:
-
         | Slot value                 | Meaning                          |
         | -------------------------- | -------------------------------- |
         | 0x00000000                 | free cluster                     |
@@ -665,7 +687,6 @@ uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root dire
         | 0x0FFFFFF8–0x0FFFFFFF      | end of chain                     |
           this means there is no next cluster; the chain ends here   
         */
-
         // cluster ended without a 0x00, the directory continues in the next
         // cluster of the chain. ask the FAT.
         uint32_t next = fat32_next_cluster(g, clus, fat_buf);  // fetch the next cluster number

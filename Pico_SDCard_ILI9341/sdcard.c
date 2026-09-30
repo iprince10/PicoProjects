@@ -367,7 +367,7 @@ uint8_t sd_read_block(uint32_t block, uint8_t *buf)
 }
 
 // read each block twice and compare all the 512 bytes
-uint8_t sd_integrity_test(uint32_t first, int count)
+uint8_t sd_integrity_test(uint32_t first, int count)  // first is block number passed and count is 300
 {
     static uint8_t blkA[SD_BLOCK_SIZE]; // first read of block
     static uint8_t blkB[SD_BLOCK_SIZE]; // second read of block

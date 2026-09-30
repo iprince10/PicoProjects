@@ -37,6 +37,7 @@ int main()
   if (sd_cmd0())
   {
     uart0_puts("CMD0 Ok - card in idle\r\n");
+    uart0_puts("\r\n");
   }
   else
   {
@@ -49,6 +50,7 @@ int main()
   if (r2 == 1)
   {
     uart0_puts("CMD8 Ok - modern card, token echoed\r\n");
+    uart0_puts("\r\n");
   }
   else if (r2 == 2)
   {
@@ -64,6 +66,7 @@ int main()
   if (sd_acmd41() == 0)
   {
     uart0_puts("ACMD41 Ok - card ready\r\n");
+    uart0_puts("\r\n");
   }
   else
   {
@@ -77,6 +80,7 @@ int main()
   if (r3 == 1)
   {
     uart0_puts("CMD58 Ok - block addressing (SDHC/SDXC)\r\n");
+    uart0_puts("\r\n");
   }
   else if (r3 == 2)
   {
@@ -89,6 +93,7 @@ int main()
 
   sd_set_clk_fast();
   uart0_puts("SPI1 CLK is 12.5 MHz now\r\n");
+  uart0_puts("\r\n");
 
   // cmd17 sd-read-block
   static uint8_t buf[512]; // static: no large buffers on the stack
@@ -99,6 +104,7 @@ int main()
     if (buf[510] == 0x55 && buf[511] == 0xAA)
     {
       uart0_puts("CMD17 Ok - MBR signature 0x55AA found\r\n");
+      uart0_puts("\r\n");
     }
     else
     {
@@ -112,9 +118,10 @@ int main()
 
   // read-twice integrity test
   uart0_puts("Integrity test....\r\n");
-  if (sd_integrity_test(0, 300) == 0)
+  if (sd_integrity_test(18688, 300) == 0)
   {
     uart0_puts("Integrity Ok - 300 blocks read twice, all identical\r\n");
+    uart0_puts("\r\n");
   }
   else
   {
@@ -138,6 +145,7 @@ int main()
     uart0_puts("MBR Ok - filesystem starts at block ");
     uart0_putnum(part_start);
     uart0_puts("\r\n");
+    uart0_puts("\r\n");
   }
   else
   {
@@ -147,8 +155,8 @@ int main()
   // BPB
   // block part_start is the VBR. its BPB gives the FAT32 geometry, which
   // every later read depends on. no point going on if this fails.
-  static uint8_t vbr[512];
-  fat_geom_t geom;
+  static uint8_t vbr[512]; // static 512 byte block for volume boot record
+  fat_geom_t geom;         // struct to store the main fields of the vbr/bios
 
   uart0_puts("BPB - reading block ");
   uart0_putnum(part_start);
@@ -160,10 +168,12 @@ int main()
   else if (fat32_parse_bpb(vbr, part_start, &geom) == 0)
   {
     uart0_puts("BPB Ok - FAT32 geometry read\r\n");
+    uart0_puts("\r\n");
     uart0_puts("Root dir - listing....\r\n");
     if (fat32_list_root(&geom) == 0)
     {
       uart0_puts("Root dir Ok\r\n");
+      uart0_puts("\r\n");
     }
     else
     {
