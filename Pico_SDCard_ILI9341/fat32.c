@@ -348,7 +348,7 @@ uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g)
 //   0x08 volume label
 //   0x10 directory
 //   0x20 archive
-//   0x0F all four low bits set = a long filename piece, not a real entry
+//   0x0F LFN    : all four low bits set = a long filename piece, not a real entry
 // the first cluster is split across two fields six bytes apart. FAT12/16 had
 // a 16 bit cluster at offset 26; FAT32 added a high half at offset 20 and calls
 // the real number high:low. only 28 bits are used, top 4 reserved.
@@ -553,6 +553,7 @@ static void fat32_show_name83(const uint8_t *raw)
 // long names, and follows the FAT chain when a cluster runs out before a 0x00
 // record ends the directory.
 // returns 0 on success, 0xFF if a needed block could not be read.
+
 uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root directly whatever it contains whether the short names or if the file is of long names then it displays the long name
 {
     static uint8_t dir_buf[512];           // one block of directory records , holds the directory block bytes
@@ -560,7 +561,7 @@ uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root dire
     static char lfn_name[FAT_LFN_MAX + 1]; // long name being rebuilt , array for storing a long file name , total length for this is 261 
     uint8_t lfn_check = 0;                 // checksum the pieces must match , checksum valid variable 
     int lfn_seen = 0;                      // how many 0x0F pieces are pending, whether we have seen a lfn fragment record
-    uint32_t clus = g->root_cluster;       // the inital root cluster which is 2
+    uint32_t clus = 12;       // the inital root cluster which is 2
     int total = 0;                         // stores total entries seen 
 
     uart0_puts("Root dir: cluster ");

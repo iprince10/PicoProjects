@@ -188,43 +188,53 @@ int main()
   while (1)
   {
     SIO_GPIO_OUT_XOR = GPIO25;
-    delay_ms(500);
+    delay_ms(3000);
   }
 }
 
-// ---- Opened the serial port COM14 ----
-// CMD0....
-// CMD0 Ok - card in idle
-// CMD8....
-// CMD8 Ok - modern card, token echoed
-// CMD55 + ACMD41....
-// ACMD41 Ok - card ready
-// CMD58....
-// CMD58 Ok - block addressing (SDHC/SDXC)
-// SPI1 CLK is 12.5 MHz now
-// CMD17 - reading block 0....
-// CMD17 Ok - MBR signature 0x55AA found
-// Integrity test....
-// integrity test done - blocks 300, failures 0
-// Integrity Ok - 300 blocks read twice, all identical
-// MBR - reading block 0....
-// Part 0: Type 0x0C  FAT32 (LBA)
-// Start : 2048 Size : 62531584 Sectors / 30533 MiB
-// Chosen partition: Start block 2048 (size 30533 MiB)
-// FAT32 confirmed - its VBR is the sector above
-// MBR Ok - filesystem starts at block 2048
-// BPB - reading block 2048....
-// BPB: bytes/sector 512, sectors/cluster 64 (32768 byte clusters)
-// reserved 1120, FATs 2, sectors/FAT 7632
-// total sectors 62531584 (30533 MiB)
-// FAT starts at block 3168, data starts at block 18432
-// clusters 976800, root cluster 2
-// BPB Ok - FAT32 geometry read
-// Root dir - listing....
-// Root dir: cluster 2, first block 18432
-// [DIR]  System Volume Information  cluster 3
-// [FILE] Prince.rgb  cluster 6  size 153600
-// [FILE] LongNameTesting.txt  cluster 0  size 0
-// Root dir done, 3 entries
-// Root dir Ok
-// ---- Closed serial port COM14 due to disconnection from the machine ----
+/*---- Opened the serial port COM14 ----
+CMD0....
+CMD0 Ok - card in idle
+
+CMD8....
+CMD8 Ok - modern card, token echoed
+
+CMD55 + ACMD41....
+ACMD41 Ok - card ready
+
+CMD58....
+CMD58 Ok - block addressing (SDHC/SDXC)
+
+SPI1 CLK is 12.5 MHz now
+
+CMD17 - reading block 0....
+CMD17 Ok - MBR signature 0x55AA found
+
+Integrity test....
+integrity test done - blocks 300, failures 0
+Integrity Ok - 300 blocks read twice, all identical
+
+MBR - reading block 0....
+Part 0: Type 0x0C  FAT32 (LBA)
+Start : 2048 Size : 62531584 Sectors / 30533 MiB
+Chosen partition: Start block 2048 (size 30533 MiB)
+FAT32 confirmed - its VBR is the sector above
+MBR Ok - filesystem starts at block 2048
+
+BPB - reading block 2048....
+BPB: bytes/sector 512, Sectors/cluster 64 (32768 byte per clusters)
+Reserved 1120, FATs 2, Sectors/FAT 7632
+Total sectors 62531584 (30533 MebiByte)
+FAT starts at block 3168, data starts at block 18432
+Clusters 976800, Root cluster 2
+BPB Ok - FAT32 geometry read
+
+Root dir - listing....
+Root dir: cluster 2, first block 18432
+[DIR]  System Volume Information  cluster 3
+[FILE] Prince.rgb  cluster 6  size 153600
+[FILE] LongNameTesting.txt  cluster 11  size 1
+[DIR]  Testing_Dir  cluster 12
+Root dir done, 4 entries
+Root dir Ok
+ ---- Closed serial port COM14 due to disconnection from the machine ---- */
