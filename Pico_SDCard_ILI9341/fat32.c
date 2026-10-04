@@ -105,12 +105,12 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
     uint8_t chosen_type = 0;
     uint8_t found = 0;
 
-    if (mbr[SD_MBR_SIG_OFFSET] != 0x55 || mbr[SD_MBR_SIG_OFFSET + 1] != 0xAA)  // mbr eof signature check 0x55 & 0xAA
+    if (mbr[SD_MBR_SIG_OFFSET] != 0x55 || mbr[SD_MBR_SIG_OFFSET + 1] != 0xAA) // mbr eof signature check 0x55 & 0xAA
     {
         uart0_puts("MBR: no 0x55AA signature, not a partition table\r\n");
-        return 0xFF; 
+        return 0xFF;
     }
-    for (int i = 0; i < SD_MBR_PART_COUNT; i++)  
+    for (int i = 0; i < SD_MBR_PART_COUNT; i++)
     {
         // entry i sits 16 bytes further along each time
         uint8_t *entry = mbr + SD_MBR_PART_OFFSET + (i * SD_MBR_PART_SIZE); // entry is a pointer to the memory location inside the mbr block
@@ -128,7 +128,7 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
         uart0_puts(": Type 0x");
         uart0_puthex(type);
         uart0_puts(" ");
-        mbr_show_type(type); 
+        mbr_show_type(type);
         uart0_puts("\r\nStart : ");
         uart0_putnum(start);
         uart0_puts(" Size : ");
@@ -141,7 +141,7 @@ uint8_t sd_mbr_parse(uint8_t *mbr, uint32_t *part_start, uint32_t *part_size)
 
         if (!found) // first usable entry wins, we have not looked for more
         {
-            *part_start = start;  // partiiton start i.e. 
+            *part_start = start; // partiiton start i.e.
             *part_size = size;
             chosen_type = type;
             found = 1;
@@ -362,7 +362,10 @@ uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g)
 #define FAT_DIR_END 0x00                           // End of chain marker
 #define FAT_DIR_DELETED 0xE5                       // delete entry marker
 #define FAT_ATTR_DIR 0x10                          // sets the bit that when adn with fat_dir_attr tells whether file or directory
-#define FAT_ATTR_LFN 0x0F                          // value of attribute byte when the file is long file name
+#define FAT_ATTR_READONLY 0x01                     // file is write-protected
+#define FAT_ATTR_HIDDEN 0x02                       // file not shown in normal listng or file is marked hidden or system/window file
+#define FAT_ATTR_SYSTEM 0x04                       // this is a os internal file/folder
+#define FAT_ATTR_LFN 0x0F                          // four low bits set , value of attribute byte when the file is long file name
 // a 0x0F record carries 13 UTF-16 characters in three runs, and the records are
 // stored last chunk first:
 //   bytes 1..10  -> 5 chars
@@ -376,6 +379,7 @@ uint8_t fat32_parse_bpb(uint8_t *bpb, uint32_t part_start, fat_geom_t *g)
 #define FAT_LFN_CHECK 13
 #define FAT_LFN_MAX 260
 #define FAT_LFN_CHUNKS (FAT_LFN_MAX / FAT_LFN_CHARS)
+#define FAT_MAX_DEPTH 16
 
 // first block of a data cluster. clusters are numbered from 2, so cluster 2 is
 // simply the first data cluster and identity N maps to N-2:
@@ -395,15 +399,15 @@ static uint32_t fat32_cluster_to_block(const fat_geom_t *g, uint32_t clus)
 // 0x0FFFFFF8..0x0FFFFFFF is end of chain, returned unchanged so the caller stops.
 static uint32_t fat32_next_cluster(const fat_geom_t *g, uint32_t clus, uint8_t *scratch) // scratch is the 512 byte buffer , clus is the clus number
 {
-    uint32_t entry = clus * 4u;                   // byte offset inside the FAT
+    uint32_t entry = clus * 4u; // byte offset inside the FAT
     // entry gives the total bytes offset of the passed cluster
     uint32_t blk = g->fat_start + (entry / 512u); // which FAT block holds it
     // blk contains the block number which would hold the entry based on the entry byte offset
-    uint32_t off = entry % 512u;                  // where inside that block
+    uint32_t off = entry % 512u; // where inside that block
     // off contains the actual offset inside a 512 byte block.
-    // diff between the entry and off is that entry contains the total byte based on cluste N * 4 
+    // diff between the entry and off is that entry contains the total byte based on cluste N * 4
     // and off contains the entry % 512 which would be in between 0 and 511
-    if (sd_read_block(blk, scratch) != 0)         // blocking reading blk is block number and scratch is 512 byte buffer
+    if (sd_read_block(blk, scratch) != 0) // blocking reading blk is block number and scratch is 512 byte buffer
     {
         return 0x0FFFFFFFu; // a bad read acts like end of chain
     }
@@ -432,6 +436,8 @@ Long Filename (LFN) Directory Entry Layout
 | 26–27  | 2    | First cluster (low)    | Always 0x0000 — a real file would have data here   |
 | 28–31  | 4    | Name3                  | Characters 12–13 (2 × UTF-16)                      |
 -----------------------------------------------------------------------------------------------
+
+When root directory has a sub directory , the sub directory contains the . its own cluster and .. parent root cluster in them
 */
 static int fat32_lfn_chunk(const uint8_t *e, char *out)
 {
@@ -531,6 +537,14 @@ static void fat32_show_name83(const uint8_t *raw)
     }
 }
 
+static void fat32_indent(int depth)  // add the space in the sub directories , 1 depth = 1 space, indent means structuring the folder and files 
+{
+    for (int i = 0; i < depth; i++)
+    {
+        uart0_puts(" ");
+    }
+}
+
 // #define FAT_DIR_ENT_SIZE 32                        //  each entry is 32 bytes
 // #define FAT_DIR_PER_BLOCK (512 / FAT_DIR_ENT_SIZE) // 16 records in one block
 // #define FAT_DIR_NAME 0                             // 0 offset for the name
@@ -542,86 +556,85 @@ static void fat32_show_name83(const uint8_t *raw)
 // #define FAT_DIR_DELETED 0xE5                       // delete entry marker
 // #define FAT_ATTR_DIR 0x10                          // sets the bit that when adn with fat_dir_attr tells whether file or directory
 // #define FAT_ATTR_LFN 0x0F                          // value of attribute byte when the file is long file name
+// #define FAT_ATTR_READONLY 0x01                     // file is write-protected
+// #define FAT_ATTR_HIDDEN 0x02                       // file not shown in normal listng or file is marked hidden or system/window file
+// #define FAT_ATTR_SYSTEM 0x04                       // this is a os internal file/folder
+// #define FAT_ATTR_LFN 0x0F                          // four low bits set , value of attribute byte when the file is long file name
 
 // #define FAT_LFN_CHARS 13
 // #define FAT_LFN_SEQ 0
 // #define FAT_LFN_CHECK 13   // this is the checksum in the LFN Fragment
 // #define FAT_LFN_MAX 260
 // #define FAT_LFN_CHUNKS (FAT_LFN_MAX / FAT_LFN_CHARS)
+// #define FAT_MAX_DEPTH 16
 // walk the root directory from geom->root_cluster and print every live entry.
 // reads the cluster one block at a time, decodes each 32 byte record, rebuilds
 // long names, and follows the FAT chain when a cluster runs out before a 0x00
 // record ends the directory.
 // returns 0 on success, 0xFF if a needed block could not be read.
 
-uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root directly whatever it contains whether the short names or if the file is of long names then it displays the long name
+static int fat32_list_dir(const fat_geom_t *g, uint32_t start, int depth) // this lists the whole directory with their sub directories as well directly whatever it contains whether the short names or if the file is of long names then it displays the long name,
+//g is the struct containing the VBR info, start is the cluster number now and depth is how many sub directories deep we go in
 {
     static uint8_t dir_buf[512];           // one block of directory records , holds the directory block bytes
-    static uint8_t fat_buf[512];           // scratch for FAT slot reads , buffer for fat block bytes reads 
-    static char lfn_name[FAT_LFN_MAX + 1]; // long name being rebuilt , array for storing a long file name , total length for this is 261 
-    uint8_t lfn_check = 0;                 // checksum the pieces must match , checksum valid variable 
+    static uint8_t fat_buf[512];           // scratch for FAT slot reads , buffer for fat block bytes reads
+    static char lfn_name[FAT_LFN_MAX + 1]; // long name being rebuilt , array for storing a long file name , total length for this is 261
+    uint8_t lfn_check = 0;                 // checksum the pieces must match , checksum valid variable
     int lfn_seen = 0;                      // how many 0x0F pieces are pending, whether we have seen a lfn fragment record
-    uint32_t clus = 12;       // the inital root cluster which is 2
-    int total = 0;                         // stores total entries seen 
+    // uint32_t clus = g->root_cluster;    // the inital root cluster which is 2
+    uint32_t clus = start;                 // the cluster passed in the function now
+    int total = 0;                         // stores total entries seen
 
-    uart0_puts("Root dir: cluster ");
-    uart0_putnum(g->root_cluster);         // 2
-    uart0_puts(", first block ");
-    uart0_putnum(fat32_cluster_to_block(g, g->root_cluster)); // 18432  data start + cluster-2 * sectors per cluster
-    uart0_puts("\r\n");  
-
-    // the code below is nested three deep while->for->for
-    // a break only happens when end of directory recrod is found 0x00
+    // the code below is nested three deep while->for->for and also shows the sub directories in it with their files
+    // a break only happens when end of directory record is found 0x00
     // this break only escapes one loop, but we have to unwind al the three loops when eod is found so we set stop 1 and check it each loop iteration
     while (1)
     {
-        int stop = 0;  // stop is set when EOD is found , it unwinds from all three loops
-
+        int stop = 0; // stop is set when EOD is found , it unwinds from all three loops, then exits from the stop condition below 
         // one cluster is sectors_per_cluster blocks. the root is usually a
         // single 32 KiB cluster but the same loop handles any size.
-
         // sectors per cluster is 64 but end with stop set unwinds the loop
         for (uint32_t s = 0; s < g->sectors_per_cluster && !stop; s++)
         {
-            uint32_t blk = fat32_cluster_to_block(g, clus) + s;  // for a n cluster find the block number then add s cause a cluster contains 64 sectors/block
-            if (sd_read_block(blk, dir_buf) != 0)   // read the block in the 512 dir_buf buffer, if the read success it returns 0
+            uint32_t blk = fat32_cluster_to_block(g, clus) + s; // for a n cluster find the block number then add s cause a cluster contains 64 sectors/block,e.g. cluster 2 = 18432 + 0*64 = 18432
+            if (sd_read_block(blk, dir_buf) != 0)               // read the block in the 512 dir_buf buffer, it returns 0 when the read is successful
             {
                 uart0_puts("DIR: read failed at block ");
                 uart0_putnum(blk);
                 uart0_puts("\r\n");
-                return 0xFF;
+                return -1;
             }
 
-            // 16 records to a 512 byte block
-            for (int r = 0; r < FAT_DIR_PER_BLOCK; r++)  // fat directory per block is 16 as one directory is 32 bytes and total bytes in block is 512
+            // 16 records to a 512 bytes block each record is of 32 bytes
+            for (int r = 0; r < FAT_DIR_PER_BLOCK; r++) // fat directory per block is 16 as one directory is 32 bytes and total bytes in block is 512
             {
-                uint8_t *e = dir_buf + (r * FAT_DIR_ENT_SIZE);  //e is a pointer that points to memory in the buffer 
-                // 512 byte buffer then r is the iterator and fatdirentsize is 32 
+                uint8_t *e = dir_buf + (r * FAT_DIR_ENT_SIZE); // e is a pointer that points to memory in the buffer
+                // 512 byte buffer then r is the iterator and fatdirentsize is 32
 
                 // end of directory, everything after is unused
-                if (e[FAT_DIR_NAME] == FAT_DIR_END)  // fatdirend is 0x00
+                if (e[FAT_DIR_NAME] == FAT_DIR_END) // fatdirend is 0x00
                 {
-                    stop = 1;  // set stop 1 and unwinds all three loops 
+                    stop = 1; // set stop 1 and unwinds all three loops
                     break;
                 }
                 // deleted leftover, and it kills any pending long name
-                if (e[FAT_DIR_NAME] == FAT_DIR_DELETED)  // deleted is 0xE5 
+                if (e[FAT_DIR_NAME] == FAT_DIR_DELETED) // deleted is 0xE5
                 {
-                    lfn_seen = 0;  // sets the seen to 0 if it was change due to stale lfn fragments 
-                    continue;      // skips the current record only
+                    lfn_seen = 0; // sets the seen to 0 if it was change due to stale lfn fragments
+                    continue;     // skips the current record only
                 }
                 // long name piece, stash it and move on
-                if (e[FAT_DIR_ATTR] == FAT_ATTR_LFN)   // fatattrlfn is 0x0F
+                if (e[FAT_DIR_ATTR] == FAT_ATTR_LFN) // fat_attr_LFN is 0x0F
                 {
-                    uint8_t seq = e[FAT_LFN_SEQ] & 0x3Fu; // chunk number, 1 based
+                    uint8_t seq = e[FAT_LFN_SEQ] & 0x3Fu; // chunk number, 1 based , this is the order number of the lfn file fragment stored in 0-6 bits, last fragment is stored first
                     // seq is the order number stored in the specific lfn fragment records compute it out
-                    if (seq >= 1 && seq <= FAT_LFN_CHUNKS)  // chunks is the order boundary 260 / 13 = 20
+                    if (seq >= 1 && seq <= FAT_LFN_CHUNKS) // chunks is the order boundary 260 / 13 = 20 fatlfnchunks is 260/13 (max file name length divide by number of chars in one fragment)
                     {
                         // chunks arrive last first, so order by seq, not arrival
-                        fat32_lfn_chunk(e, lfn_name + (seq - 1) * FAT_LFN_CHARS); // stores the name in the lfn name at appropriate order 
-                        if (e[FAT_LFN_SEQ] & 0x40)  // checks whether it is the last fragment or not
+                        fat32_lfn_chunk(e, lfn_name + (seq - 1) * FAT_LFN_CHARS); // stores the name in the lfn name at appropriate order
+                        if (e[FAT_LFN_SEQ] & 0x40)                                // checks whether it is the last fragment or not
                         {
-                            //store the checksum here
+                            // store the checksum here
                             lfn_check = e[FAT_LFN_CHECK]; // the start chunk carries it
                         }
                         if (seq > lfn_seen)
@@ -630,51 +643,78 @@ uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root dire
                             lfn_seen = seq;
                         }
                     }
-                    continue;  // skip the iteration if not valid order number
+                    continue; // skip the iteration if not valid order number
                 }
 
                 // ---- a real entry ----
                 // rebuild the first cluster from its two halves and drop the
                 // reserved top 4 bits
-                uint32_t hi = bpb_read_le16(e + FAT_DIR_CLUS_HI);  // high 2 bytes or 16 bits of cluster byte 
-                uint32_t lo = bpb_read_le16(e + FAT_DIR_CLUS_LO);  // low 2 bytes or 16 bits of cluster byte
-                uint32_t first = ((hi << 16) | lo) & 0x0FFFFFFFu;  // combine the total 32 bits and or the top 4 reserved bits use the 28 bits
-                uint32_t size = mbr_read_le32(e + FAT_DIR_SIZE);   // get the size of the file stored in 4 bytes max 4 gb
-                int is_dir = (e[FAT_DIR_ATTR] & FAT_ATTR_DIR) ? 1 : 0;  // checks whether file or directory 
-
+                uint32_t hi = bpb_read_le16(e + FAT_DIR_CLUS_HI);      // high 2 bytes or 16 bits of cluster byte
+                uint32_t lo = bpb_read_le16(e + FAT_DIR_CLUS_LO);      // low 2 bytes or 16 bits of cluster byte
+                uint32_t first = ((hi << 16) | lo) & 0x0FFFFFFFu;      // combine the total 32 bits and or the top 4 reserved bits use the 28 bits
+                uint32_t size = mbr_read_le32(e + FAT_DIR_SIZE);       // get the size of the file stored in 4 bytes max 4 gb
+                int is_dir = (e[FAT_DIR_ATTR] & FAT_ATTR_DIR) ? 1 : 0; // checks whether file or directory
+                // "." and ".." are directory records too: print neither and
+                // descend into neither, or the walk would never end
+                // subdirectores each 32 bytes long have first byte of the name as . containing their own cluster number and then .. in the second byte containing the cluster number of their respective root directory
+                int is_dot = (e[0] == '.') && ((e[1] == ' ') || (e[1] == '.' && e[2] == ' '));
                 lfn_name[lfn_seen * FAT_LFN_CHARS] = 0; // safe terminator
-
-                total++;
-                uart0_puts(is_dir ? "[DIR]  " : "[FILE] ");
-
-                // prefer the long name if the checksum ties it to this entry
-                if (lfn_seen > 0 && fat32_lfn_checksum(e) == lfn_check)  // if checksum is correct and equal and there is some order
+                // comment out this is_hidden block if want to show the windows / system files
+                // Windows keeps its own clutter (System Volume Information and friends) marked with the hidden and system bits.
+                // honour that flag and the whole subtree drops out on its own, since a hidden directory is never descended into. no name hardcoding needed.
+                int is_hidden = (e[FAT_DIR_ATTR] & (FAT_ATTR_HIDDEN | FAT_ATTR_SYSTEM)) ? 1 : 0;
+                if (is_hidden)
                 {
-                    uart0_puts(lfn_name);
+                    lfn_seen = 0; // this entry ate its fragments, drop them
+                    continue;
                 }
-                else
+                // print the name of the file whether lfn or 8.3
+                if (!is_dot)
                 {
-                    fat32_show_name83(e);
+                    total++; // total entries count incremented
+                    fat32_indent(depth);
+                    uart0_puts(is_dir ? "[DIR]  " : "[FILE] ");
+                    // prefer the long name if the checksum ties it to this entry
+                    if (lfn_seen > 0 && fat32_lfn_checksum(e) == lfn_check)
+                    {
+                        uart0_puts(lfn_name);
+                    }
+                    else
+                    {
+                        fat32_show_name83(e);
+                    }
+                    uart0_puts("  cluster ");
+                    uart0_putnum(first);
+                    if (!is_dir)
+                    {
+                        uart0_puts("  size ");
+                        uart0_putnum(size);
+                    }
+                    uart0_puts("\r\n");
                 }
-
-                uart0_puts("  cluster ");
-                uart0_putnum(first);  // starting cluster number
-                if (!is_dir)  // if its not a directory then give size
-                {
-                    uart0_puts("  size ");
-                    uart0_putnum(size);
-                }
-                uart0_puts("\r\n");
 
                 lfn_seen = 0; // reset for the next file
+                // descend into a real subdirectory
+                if (is_dir && !is_dot && first >= 2 && depth < FAT_MAX_DEPTH)
+                {
+                    if (fat32_list_dir(g, first, depth + 1) < 0)
+                    {
+                        return -1;
+                    }
+                    // the call above reused dir_buf, so read this block back
+                    // before carrying on with the next record
+                    if (sd_read_block(blk, dir_buf) != 0)
+                    {
+                        return -1;
+                    }
+                }
             }
         }
 
-        if (stop)  // unwinds the loop if stop set
+        if (stop) // unwinds the loop if stop set
         {
             break;
         }
-
         /*
         The end-of-chain test, bit by bit
         What the function can return, per the FAT32 spec:
@@ -686,20 +726,188 @@ uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root dire
         | 0x0FFFFFF0–0x0FFFFFF6      | reserved                         |
         | 0x0FFFFFF7                 | bad cluster                      |
         | 0x0FFFFFF8–0x0FFFFFFF      | end of chain                     |
-          this means there is no next cluster; the chain ends here   
+          this means there is no next cluster; the chain ends here
         */
         // cluster ended without a 0x00, the directory continues in the next
         // cluster of the chain. ask the FAT.
-        uint32_t next = fat32_next_cluster(g, clus, fat_buf);  // fetch the next cluster number
-        if ((next & 0x0FFFFFF8u) == 0x0FFFFFF8u)  // end cluster marker 
+        uint32_t next = fat32_next_cluster(g, clus, fat_buf); // fetch the next cluster number
+        if ((next & 0x0FFFFFF8u) == 0x0FFFFFF8u)              // end cluster marker
         {
             break; // end of chain
         }
-        clus = next; // if legit cluster then proceed with it 
+        clus = next; // if legit cluster then proceed with it
     }
+    return total;
+}
 
+// list the whole tree under the root directory. prints the usual banner and
+// then hands off to the recursive walker at depth 0.
+uint8_t fat32_list_root(const fat_geom_t *g)
+{
+    int n; // stores the number of root entries
+    uart0_puts("Root dir: cluster ");
+    uart0_putnum(g->root_cluster);
+    uart0_puts(", first block ");
+    uart0_putnum(fat32_cluster_to_block(g, g->root_cluster)); // gives the starting block number of the current cluster
+    // starting block number of a N cluster = data start + (N-2)*64
+    uart0_puts("\r\n");
+    n = fat32_list_dir(g, g->root_cluster, 0);   
+    if (n < 0)
+    {
+        uart0_puts("Root dir failed\r\n");
+        return 0xFF;
+    }
     uart0_puts("Root dir done, ");
-    uart0_putnum(total);
-    uart0_puts(" entries\r\n");
+    uart0_putnum(n);
+    uart0_puts("root entries\r\n");
     return 0;
 }
+
+// uint8_t fat32_list_root(const fat_geom_t *g)   // this lists the whole root directly whatever it contains whether the short names or if the file is of long names then it displays the long name
+// {
+//     static uint8_t dir_buf[512];           // one block of directory records , holds the directory block bytes
+//     static uint8_t fat_buf[512];           // scratch for FAT slot reads , buffer for fat block bytes reads
+//     static char lfn_name[FAT_LFN_MAX + 1]; // long name being rebuilt , array for storing a long file name , total length for this is 261
+//     uint8_t lfn_check = 0;                 // checksum the pieces must match , checksum valid variable
+//     int lfn_seen = 0;                      // how many 0x0F pieces are pending, whether we have seen a lfn fragment record
+//     // uint32_t clus = g->root_cluster;       // the inital root cluster which is 2
+//     uint32_t clus = 12;
+//     int total = 0;                         // stores total entries seen
+
+//     uart0_puts("Root dir: cluster ");
+//     uart0_putnum(g->root_cluster);         // 2
+//     uart0_puts(", first block ");
+//     uart0_putnum(fat32_cluster_to_block(g, g->root_cluster)); // 18432  data start + cluster-2 * sectors per cluster
+//     uart0_puts("\r\n");
+
+//     // the code below is nested three deep while->for->for a break only happens when end of directory recrod is found 0x00
+//     // this break only escapes one loop, but we have to unwind al the three loops when eod is found so we set stop 1 and check it each loop iteration
+//     while (1)
+//     {
+//         int stop = 0;  // stop is set when EOD is found , it unwinds from all three loops
+
+//         // one cluster is sectors_per_cluster blocks. the root is usually a
+//         // single 32 KiB cluster but the same loop handles any size.
+
+//         // sectors per cluster is 64 but end with stop set unwinds the loop
+//         for (uint32_t s = 0; s < g->sectors_per_cluster && !stop; s++)
+//         {
+//             uint32_t blk = fat32_cluster_to_block(g, clus) + s;  // for a n cluster find the block number then add s cause a cluster contains 64 sectors/block,e.g. cluster 2 = 18432 + 0*64 = 18432
+//             if (sd_read_block(blk, dir_buf) != 0)   // read the block in the 512 dir_buf buffer, if the read success it returns 0
+//             {
+//                 uart0_puts("DIR: read failed at block ");
+//                 uart0_putnum(blk);
+//                 uart0_puts("\r\n");
+//                 return 0xFF;
+//             }
+
+//             // 16 records to a 512 byte block
+//             for (int r = 0; r < FAT_DIR_PER_BLOCK; r++)  // fat directory per block is 16 as one directory is 32 bytes and total bytes in block is 512
+//             {
+//                 uint8_t *e = dir_buf + (r * FAT_DIR_ENT_SIZE);  //e is a pointer that points to memory in the buffer
+//                 // 512 byte buffer then r is the iterator and fatdirentsize is 32
+
+//                 // end of directory, everything after is unused
+//                 if (e[FAT_DIR_NAME] == FAT_DIR_END)  // fatdirend is 0x00
+//                 {
+//                     stop = 1;  // set stop 1 and unwinds all three loops
+//                     break;
+//                 }
+//                 // deleted leftover, and it kills any pending long name
+//                 if (e[FAT_DIR_NAME] == FAT_DIR_DELETED)  // deleted is 0xE5
+//                 {
+//                     lfn_seen = 0;  // sets the seen to 0 if it was change due to stale lfn fragments
+//                     continue;      // skips the current record only
+//                 }
+//                 // long name piece, stash it and move on
+//                 if (e[FAT_DIR_ATTR] == FAT_ATTR_LFN)   // fat_attr_LFN is 0x0F
+//                 {
+//                     uint8_t seq = e[FAT_LFN_SEQ] & 0x3Fu; // chunk number, 1 based , this is the order number of the lfn file fragment stored in 0-6 bits, last fragment is stored first
+//                     // seq is the order number stored in the specific lfn fragment records compute it out
+//                     if (seq >= 1 && seq <= FAT_LFN_CHUNKS)  // chunks is the order boundary 260 / 13 = 20 fatlfnchunks is 260/13 (max file name length divide by number of chars in one fragment)
+//                     {
+//                         // chunks arrive last first, so order by seq, not arrival
+//                         fat32_lfn_chunk(e, lfn_name + (seq - 1) * FAT_LFN_CHARS); // stores the name in the lfn name at appropriate order
+//                         if (e[FAT_LFN_SEQ] & 0x40)  // checks whether it is the last fragment or not
+//                         {
+//                             //store the checksum here
+//                             lfn_check = e[FAT_LFN_CHECK]; // the start chunk carries it
+//                         }
+//                         if (seq > lfn_seen)
+//                         {
+//                             // update the lfn seen with the order number
+//                             lfn_seen = seq;
+//                         }
+//                     }
+//                     continue;  // skip the iteration if not valid order number
+//                 }
+
+//                 // ---- a real entry ----
+//                 // rebuild the first cluster from its two halves and drop the
+//                 // reserved top 4 bits
+//                 uint32_t hi = bpb_read_le16(e + FAT_DIR_CLUS_HI);  // high 2 bytes or 16 bits of cluster byte
+//                 uint32_t lo = bpb_read_le16(e + FAT_DIR_CLUS_LO);  // low 2 bytes or 16 bits of cluster byte
+//                 uint32_t first = ((hi << 16) | lo) & 0x0FFFFFFFu;  // combine the total 32 bits and or the top 4 reserved bits use the 28 bits
+//                 uint32_t size = mbr_read_le32(e + FAT_DIR_SIZE);   // get the size of the file stored in 4 bytes max 4 gb
+//                 int is_dir = (e[FAT_DIR_ATTR] & FAT_ATTR_DIR) ? 1 : 0;  // checks whether file or directory
+
+//                 lfn_name[lfn_seen * FAT_LFN_CHARS] = 0; // safe terminator
+
+//                 total++;  // total entries count incremented
+//                 uart0_puts(is_dir ? "[DIR]  " : "[FILE] ");
+
+//                 // prefer the long name if the checksum ties it to this entry
+//                 if (lfn_seen > 0 && fat32_lfn_checksum(e) == lfn_check)  // if checksum is correct and equal and there is some order
+//                 {
+//                     uart0_puts(lfn_name);
+//                 }
+//                 else
+//                 {
+//                     fat32_show_name83(e);
+//                 }
+
+//                 uart0_puts("  cluster ");
+//                 uart0_putnum(first);  // starting cluster number
+//                 if (!is_dir)  // if its not a directory then give size
+//                 {
+//                     uart0_puts("  size ");
+//                     uart0_putnum(size);
+//                 }
+//                 uart0_puts("\r\n");
+
+//                 lfn_seen = 0; // reset for the next file
+//             }
+//         }
+
+//         if (stop)  // unwinds the loop if stop set
+//         {
+//             break;
+//         }
+//         /*
+//         The end-of-chain test, bit by bit
+//         What the function can return, per the FAT32 spec:
+//         | Slot value                 | Meaning                          |
+//         | -------------------------- | -------------------------------- |
+//         | 0x00000000                 | free cluster                     |
+//         | 0x00000001                 | reserved                         |
+//         | 0x00000002–0x0FFFFFEF      | a real next cluster number       |
+//         | 0x0FFFFFF0–0x0FFFFFF6      | reserved                         |
+//         | 0x0FFFFFF7                 | bad cluster                      |
+//         | 0x0FFFFFF8–0x0FFFFFFF      | end of chain                     |
+//           this means there is no next cluster; the chain ends here
+//         */
+//         // cluster ended without a 0x00, the directory continues in the next
+//         // cluster of the chain. ask the FAT.
+//         uint32_t next = fat32_next_cluster(g, clus, fat_buf);  // fetch the next cluster number
+//         if ((next & 0x0FFFFFF8u) == 0x0FFFFFF8u)  // end cluster marker
+//         {
+//             break; // end of chain
+//         }
+//         clus = next; // if legit cluster then proceed with it
+//     }
+
+//     uart0_puts("Root dir done, ");
+//     uart0_putnum(total);
+//     uart0_puts(" entries\r\n");
+//     return 0;
+// }
