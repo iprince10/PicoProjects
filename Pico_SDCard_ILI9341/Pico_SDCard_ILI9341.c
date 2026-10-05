@@ -188,7 +188,7 @@ int main()
   while (1)
   {
     SIO_GPIO_OUT_XOR = GPIO25;
-    delay_ms(3000);
+    delay_ms(500);
   }
 }
 

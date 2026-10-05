@@ -626,7 +626,7 @@ static int fat32_list_dir(const fat_geom_t *g, uint32_t start, int depth) // thi
                 // long name piece, stash it and move on
                 if (e[FAT_DIR_ATTR] == FAT_ATTR_LFN) // fat_attr_LFN is 0x0F
                 {
-                    uint8_t seq = e[FAT_LFN_SEQ] & 0x3Fu; // chunk number, 1 based , this is the order number of the lfn file fragment stored in 0-6 bits, last fragment is stored first
+                    uint8_t seq = e[FAT_LFN_SEQ] & 0x3Fu; // chunk/order number, 1 based , this is the order number of the lfn file fragment stored in 0-6 bits, last fragment is stored first
                     // seq is the order number stored in the specific lfn fragment records compute it out
                     if (seq >= 1 && seq <= FAT_LFN_CHUNKS) // chunks is the order boundary 260 / 13 = 20 fatlfnchunks is 260/13 (max file name length divide by number of chars in one fragment)
                     {
@@ -672,16 +672,16 @@ static int fat32_list_dir(const fat_geom_t *g, uint32_t start, int depth) // thi
                 if (!is_dot)
                 {
                     total++; // total entries count incremented
-                    fat32_indent(depth);
+                    fat32_indent(depth);  // add the respective space of the subdirectory
                     uart0_puts(is_dir ? "[DIR]  " : "[FILE] ");
                     // prefer the long name if the checksum ties it to this entry
-                    if (lfn_seen > 0 && fat32_lfn_checksum(e) == lfn_check)
+                    if (lfn_seen > 0 && fat32_lfn_checksum(e) == lfn_check)  // if a lfn fragment has been seen and checksum is correct then print the long name 
                     {
                         uart0_puts(lfn_name);
                     }
                     else
                     {
-                        fat32_show_name83(e);
+                        fat32_show_name83(e);  // else show the 8.3 name 
                     }
                     uart0_puts("  cluster ");
                     uart0_putnum(first);
@@ -695,7 +695,7 @@ static int fat32_list_dir(const fat_geom_t *g, uint32_t start, int depth) // thi
 
                 lfn_seen = 0; // reset for the next file
                 // descend into a real subdirectory
-                if (is_dir && !is_dot && first >= 2 && depth < FAT_MAX_DEPTH)
+                if (is_dir && !is_dot && first >= 2 && depth < FAT_MAX_DEPTH)  // if it a sub directory under root ,deep dive into it ignore the directory named as ' . ' or ' .. ' using the !is_dot condition
                 {
                     if (fat32_list_dir(g, first, depth + 1) < 0)
                     {
@@ -744,21 +744,21 @@ static int fat32_list_dir(const fat_geom_t *g, uint32_t start, int depth) // thi
 // then hands off to the recursive walker at depth 0.
 uint8_t fat32_list_root(const fat_geom_t *g)
 {
-    int n; // stores the number of root entries
+    int total_root_entries; // stores the number of root entries
     uart0_puts("Root dir: cluster ");
     uart0_putnum(g->root_cluster);
     uart0_puts(", first block ");
     uart0_putnum(fat32_cluster_to_block(g, g->root_cluster)); // gives the starting block number of the current cluster
     // starting block number of a N cluster = data start + (N-2)*64
     uart0_puts("\r\n");
-    n = fat32_list_dir(g, g->root_cluster, 0);   
-    if (n < 0)
+    total_root_entries = fat32_list_dir(g, g->root_cluster, 0);   
+    if (total_root_entries < 0)
     {
         uart0_puts("Root dir failed\r\n");
         return 0xFF;
     }
     uart0_puts("Root dir done, ");
-    uart0_putnum(n);
+    uart0_putnum(total_root_entries);
     uart0_puts("root entries\r\n");
     return 0;
 }
