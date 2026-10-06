@@ -95,7 +95,7 @@ void ili9341_init(void)
     GPIO18_CTRL = GPIO_FUNC_SPI0; // spi0 sck
     GPIO19_CTRL = GPIO_FUNC_SPI0; // spi0 tx mosi
     GPIO20_CTRL = GPIO_FUNC_SIO;  // sio d/c pin
-    GPIO21_CTRL = GPIO_FUNC_SIO;  // sio hardware reset pin
+    GPIO21_CTRL = GPIO_FUNC_SIO;  // sio hw reset pin
 
     SIO_GPIO_OE_SET = (1u << 20) | (1u << 21); // enable output for gpio 20 nd 21
     SIO_GPIO_OUT_SET = (1u << 21);             // rst high

@@ -31,6 +31,10 @@ int main()
   spi1_init();
   sd_dummy_clocks();
   led_init();
+  ili9341_init();
+  // ili9341_fill_area(0, 0, 239, 319, 0xFFFF);
+  // ili9341_draw_char(2, 2, 'A', 0x0000, 0xFFFF, 2);
+  // ili9341_draw_string(4, 158, "PrinceJha%", 0x0000, 0xFFFF, 2);
 
   // cmd0
   uart0_puts("CMD0....\r\n");
@@ -169,23 +173,26 @@ int main()
   {
     uart0_puts("BPB Ok - FAT32 geometry read\r\n");
     uart0_puts("\r\n");
+
     uart0_puts("Root dir - listing....\r\n");
     if (fat32_list_root(&geom) == 0)
     {
       uart0_puts("Root dir Ok\r\n");
       uart0_puts("\r\n");
+      // read_prince(&geom); // only ever called with valid geometry
     }
     else
     {
       uart0_puts("Root dir FAIL\r\n");
     }
+    // bring up the panel, then blast the image with the real geometry
+    ili9341_init();
+    draw_prince(&geom);
   }
   else
   {
     uart0_puts("BPB FAIL - not a usable FAT32 boot sector\r\n");
   }
-
-  read_prince();
 
   while (1)
   {

@@ -26,6 +26,7 @@ uint8_t fat32_list_root(const fat_geom_t *g);
 
 // uint8_t fat32_read_file(const fat_geom_t *g, uint32_t start, uint32_t size, fat32_sink_t sink, void *ctx);
 
-void read_prince(void);
+void read_prince(const fat_geom_t *g);
+void draw_prince(const fat_geom_t *g);
 
 #endif

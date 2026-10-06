@@ -3,6 +3,7 @@
 #include "sdcard.h"
 #include "uart.h"
 #include "fat32.h"
+#include "ili9341.h"
 
 // little endian: lowest offset holds the least significant byte. this is the
 // reverse of what sd_send_command puts on the wire
@@ -822,7 +823,7 @@ uint8_t fat32_read_file(const fat_geom_t *g, uint32_t start, uint32_t size, fat3
         uint32_t next = fat32_next_cluster(g, clus, fat_buf) & 0x0FFFFFFFu;
         // 0x0FFFFFF7 is bad , 0x0FFFFFF8..F is the end of the chain, below 2 is free
         //  or reserved : none of these can be a next cluster
-         if (next < 2 || next >= 0x0FFFFFF7u)
+        if (next < 2 || next >= 0x0FFFFFF7u)
         {
             uart0_puts("FILE: chain ended before size bytes\r\n");
             return 0xFF;
@@ -859,20 +860,22 @@ static void probe_sink(const uint8_t *buf, uint32_t len, void *ctx) // fat buffe
 }
 
 // read Prince.rgb and test the chain walk works end to end
-void read_prince(void)
+void read_prince(const fat_geom_t *g)
 {
-    fat_geom_t g;
-    probe_ctx_t probe;
-    uint8_t rc;
-
-    // ... mount, parse bpb into g, as before ...
+    probe_ctx_t probe; // state handed to the sink , total and dumped
+    uint8_t rc;        // return code from the file reader
 
     // for now the first cluster and size come straight from the entry we
     // already printed: Prince.rgb at cluster 6, size 153600
     probe.total = 0; // initialize the total and dumped as 0
     probe.dumped = 0;
+    uart0_puts("reader geom: fat_start ");
+    uart0_putnum(g->fat_start);
+    uart0_puts(", data_start ");
+    uart0_putnum(g->data_start);
+    uart0_puts("\r\n");
     uart0_puts("Reading Prince.rgb...\r\n");
-    rc = fat32_read_file(&g, 6, 153600, probe_sink, &probe);
+    rc = fat32_read_file(g, 6, 153600, probe_sink, &probe);
     if (rc == 0)
     {
         uart0_puts("Read done, ");
@@ -882,5 +885,81 @@ void read_prince(void)
     else
     {
         uart0_puts("Read failed\r\n");
+    }
+}
+
+// context handed to the display sink. one field is enough: a running total of
+// pixel-bytes we have pushed at the panel, so the log can prove the whole
+// frame arrived.
+typedef struct
+{
+    uint32_t bytes; // pixel-bytes streamed so far
+} disp_ctx_t;
+
+// the display sink: the reader calls this once per 512 byte block (the last
+// call may be shorter). it turns a block of RGB565 bytes into panel writes.
+// the write window was opened once for the whole frame, so this does no row
+// math at all - it just streams pixel pairs and lets the controller advance.
+static void lcd_sink(const uint8_t *buf, uint32_t len, void *ctx)
+{
+    disp_ctx_t *p = (disp_ctx_t *)ctx;
+    // a pixel is 2 bytes. step i by 2 so a pair is never split.
+    for (uint32_t i = 0; i + 1 < len; i += 2)
+    {
+        // file is little-endian RGB565, the panel wants the high byte first.
+        // if the image comes out looking right, this order is the one.
+        // if the colours are wrong but the shapes are fine, swap these two.
+        ili9341_write_data(buf[i]); // high byte first
+        ili9341_write_data(buf[i+1]);     // then the low byte
+    }
+    p->bytes += len;
+}
+
+// draw Prince.rgb full screen. g is the geometry parsed in main - borrowed,
+// never rebuilt here. Prince.rgb is the entry the tree already printed:
+// cluster 6, size 153600 = 240 * 320 * 2 pixels.
+void draw_prince(const fat_geom_t *g)
+{
+    disp_ctx_t ctx;
+    uint8_t rc;
+
+    ctx.bytes = 0;
+
+    // orientation: clear the MX mirror the old tank code left in MADCTL.
+    // 0x08 keeps BGR (correct red/blue on this panel) and drops the flip.
+    // ili9341_write_command(0x36);
+    // ili9341_write_data(0x08);
+
+    // open ONE window for the whole frame: columns 0..239. the panel wants
+    // the high byte of each 16 bit bound first.
+    ili9341_write_command(0x2A);
+    ili9341_write_data(0x00);
+    ili9341_write_data(0x00);
+    ili9341_write_data(0x00);
+    ili9341_write_data(0xEF); // 239
+
+    // rows 0..319
+    ili9341_write_command(0x2B);
+    ili9341_write_data(0x00);
+    ili9341_write_data(0x00);
+    ili9341_write_data(0x01);
+    ili9341_write_data(0x3F); // 319
+
+    // from here every 2 bytes is one pixel and the controller places it.
+    ili9341_write_command(0x2C);
+
+    uart0_puts("LCD: streaming Prince.rgb...\r\n");
+    // same reader, same chain walk, new consumer. geometry goes straight in.
+    rc = fat32_read_file(g, 6, 153600, lcd_sink, &ctx);
+
+    if (rc == 0)
+    {
+        uart0_puts("LCD: frame done, ");
+        uart0_putnum(ctx.bytes);
+        uart0_puts(" pixel-bytes\r\n"); // want 153600
+    }
+    else
+    {
+        uart0_puts("LCD: read failed mid-frame\r\n");
     }
 }
