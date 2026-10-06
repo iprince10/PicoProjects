@@ -185,6 +185,8 @@ int main()
     uart0_puts("BPB FAIL - not a usable FAT32 boot sector\r\n");
   }
 
+  read_prince();
+
   while (1)
   {
     SIO_GPIO_OUT_XOR = GPIO25;
