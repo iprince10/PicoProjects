@@ -25,6 +25,87 @@ void led_init(void)
   SIO_GPIO_OUT |= GPIO25;
 }
 
+/* ---- SD bring-up ----
+   the protocol lives in exactly one place: sd_bringup().
+   sd_bringup_debug() is a wrapper that runs it and narrates the result,
+   so debug output is optional and never duplicated. */
+
+typedef struct
+{
+  int cmd0;      // 1 = idle ok
+  uint8_t cmd8;  // 1 = v2 echoed, 2 = v1 (old), 0 = fail
+  int acmd41;    // 0 = ready
+  uint8_t cmd58; // 1 = SDHC block addressing, 2 = SDSC byte, 0 = fail
+} sd_status_t;
+
+// talks to the card - no uart. leaves the card initialised and on the fast
+// clock, ready for block reads. returns 0, or the negative step number that
+// failed (so the caller can report which stage died).
+static int sd_bringup(sd_status_t *st)
+{
+  st->cmd0 = sd_cmd0();
+  if (!st->cmd0)
+    return -1;
+
+  st->cmd8 = sd_cmd8();
+  if (st->cmd8 == 0)
+    return -2;
+
+  st->acmd41 = sd_acmd41();
+  if (st->acmd41 != 0)
+    return -3;
+
+  st->cmd58 = sd_cmd58();
+  if (st->cmd58 == 0)
+    return -4;
+
+  sd_set_clk_fast(); // last: only now is the card allowed full speed
+  return 0;
+}
+
+// runs the bring-up and prints every step, in the same words as before.
+static void sd_bringup_debug(void)
+{
+  sd_status_t st = {0};
+
+  int rc = sd_bringup(&st);
+
+  uart0_puts("---- SD bring-up ----\r\n");
+
+  uart0_puts("CMD0....\r\n");
+  uart0_puts(st.cmd0 ? "CMD0 Ok - card in idle\r\n" : "CMD0 FAIL\r\n");
+
+  uart0_puts("CMD8....\r\n");
+  if (st.cmd8 == 1)
+    uart0_puts("CMD8 Ok - modern card, token echoed\r\n");
+  else if (st.cmd8 == 2)
+    uart0_puts("CMD8 - V1 card (old)\r\n");
+  else
+    uart0_puts("CMD8 FAIL\r\n");
+
+  uart0_puts("CMD55 + ACMD41....\r\n");
+  uart0_puts(st.acmd41 == 0 ? "ACMD41 Ok - card ready\r\n" : "ACMD41 FAIL\r\n");
+
+  uart0_puts("CMD58....\r\n");
+  if (st.cmd58 == 1)
+    uart0_puts("CMD58 Ok - block addressing (SDHC/SDXC)\r\n");
+  else if (st.cmd58 == 2)
+    uart0_puts("CMD58 - byte addressing (SDSC)\r\n");
+  else
+    uart0_puts("CMD58 FAIL\r\n");
+
+  if (rc == 0)
+  {
+    uart0_puts("SPI1 CLK is 12.5 MHz now\r\n");
+  }
+  else
+  {
+    uart0_puts("bring-up stopped at step ");
+    uart0_putnum((uint32_t)(-rc));
+    uart0_puts("\r\n");
+  }
+}
+
 int main()
 {
   uart0_init();
@@ -36,105 +117,18 @@ int main()
   // ili9341_draw_char(2, 2, 'A', 0x0000, 0xFFFF, 2);
   // ili9341_draw_string(4, 158, "PrinceJha%", 0x0000, 0xFFFF, 2);
 
-  // cmd0
-  uart0_puts("CMD0....\r\n");
-  if (sd_cmd0())
+  // SD: silent bring-up. if the card does not come up, run it again through
+  // the talking version, so a failure is always visible and the debug cost
+  // is only ever paid on failure.
+  sd_status_t st;
+  if (sd_bringup(&st) != 0)
   {
-    uart0_puts("CMD0 Ok - card in idle\r\n");
-    uart0_puts("\r\n");
-  }
-  else
-  {
-    uart0_puts("CMD0 FAIL\r\n");
+    sd_bringup_debug();
   }
 
-  // cmd8
-  uart0_puts("CMD8....\r\n");
-  uint8_t r2 = sd_cmd8();
-  if (r2 == 1)
-  {
-    uart0_puts("CMD8 Ok - modern card, token echoed\r\n");
-    uart0_puts("\r\n");
-  }
-  else if (r2 == 2)
-  {
-    uart0_puts("CMD8 - V1 card (old)\r\n");
-  }
-  else
-  {
-    uart0_puts("CMD8 FAIL\r\n");
-  }
+  // sd_bringup_debug();     // <- uncomment this line while bringing the board up
 
-  // cmd55 + acmd41
-  uart0_puts("CMD55 + ACMD41....\r\n");
-  if (sd_acmd41() == 0)
-  {
-    uart0_puts("ACMD41 Ok - card ready\r\n");
-    uart0_puts("\r\n");
-  }
-  else
-  {
-    uart0_puts("ACMD41 FAIL\r\n");
-  }
-
-  // cmd58
-  uart0_puts("CMD58....\r\n");
-  uint8_t r3 = sd_cmd58();
-
-  if (r3 == 1)
-  {
-    uart0_puts("CMD58 Ok - block addressing (SDHC/SDXC)\r\n");
-    uart0_puts("\r\n");
-  }
-  else if (r3 == 2)
-  {
-    uart0_puts("CMD58 - byte addressing (SDSC)\r\n");
-  }
-  else
-  {
-    uart0_puts("CMD58 FAIL\r\n");
-  }
-
-  sd_set_clk_fast();
-  uart0_puts("SPI1 CLK is 12.5 MHz now\r\n");
-  uart0_puts("\r\n");
-
-  // cmd17 sd-read-block
-  static uint8_t buf[512]; // static: no large buffers on the stack
-  uart0_puts("CMD17 - reading block 0....\r\n");
-
-  if (sd_read_block(0, buf) == 0)
-  {
-    if (buf[510] == 0x55 && buf[511] == 0xAA)
-    {
-      uart0_puts("CMD17 Ok - MBR signature 0x55AA found\r\n");
-      uart0_puts("\r\n");
-    }
-    else
-    {
-      uart0_puts("CMD17 - read ok, no MBR signature\r\n");
-    }
-  }
-  else
-  {
-    uart0_puts("CMD17 FAIL\r\n");
-  }
-
-  // // read-twice integrity test
-  // uart0_puts("Integrity test....\r\n");
-  // if (sd_integrity_test(18688, 300) == 0)
-  // {
-  //   uart0_puts("Integrity Ok - 300 blocks read twice, all identical\r\n");
-  //   uart0_puts("\r\n");
-  // }
-  // else
-  // {
-  //   uart0_puts("Integrity FAIL - data path not clean at this clock\r\n");
-  // }
-
-  // MBR Parser
-  // block 0 is the partition table. the start LBA it hands back is already
-  // a block number,
+  // MBR Parser block 0 is the partition table. the start LBA it hands back is already a block number,
   static uint8_t mbr[512];
   uint32_t part_start = 0;
   uint32_t part_size = 0;
@@ -156,8 +150,7 @@ int main()
     uart0_puts("MBR FAIL - no usable partition table\r\n");
   }
 
-  // BPB
-  // block part_start is the VBR. its BPB gives the FAT32 geometry, which
+  // BPB block part_start is the VBR. its BPB gives the FAT32 geometry, which
   // every later read depends on. no point going on if this fails.
   static uint8_t vbr[512]; // static 512 byte block for volume boot record
   fat_geom_t geom;         // struct to store the main fields of the vbr/bios
@@ -185,8 +178,7 @@ int main()
     {
       uart0_puts("Root dir FAIL\r\n");
     }
-    // bring up the panel, then blast the image with the real geometry
-    ili9341_init();
+    // blast the image with the real geometry
     draw_prince(&geom);
   }
   else
@@ -201,49 +193,3 @@ int main()
   }
 }
 
-/*---- Opened the serial port COM14 ----
-CMD0....
-CMD0 Ok - card in idle
-
-CMD8....
-CMD8 Ok - modern card, token echoed
-
-CMD55 + ACMD41....
-ACMD41 Ok - card ready
-
-CMD58....
-CMD58 Ok - block addressing (SDHC/SDXC)
-
-SPI1 CLK is 12.5 MHz now
-
-CMD17 - reading block 0....
-CMD17 Ok - MBR signature 0x55AA found
-
-Integrity test....
-integrity test done - blocks 300, failures 0
-Integrity Ok - 300 blocks read twice, all identical
-
-MBR - reading block 0....
-Part 0: Type 0x0C  FAT32 (LBA)
-Start : 2048 Size : 62531584 Sectors / 30533 MiB
-Chosen partition: Start block 2048 (size 30533 MiB)
-FAT32 confirmed - its VBR is the sector above
-MBR Ok - filesystem starts at block 2048
-
-BPB - reading block 2048....
-BPB: bytes/sector 512, Sectors/cluster 64 (32768 byte per clusters)
-Reserved 1120, FATs 2, Sectors/FAT 7632
-Total sectors 62531584 (30533 MebiByte)
-FAT starts at block 3168, data starts at block 18432
-Clusters 976800, Root cluster 2
-BPB Ok - FAT32 geometry read
-
-Root dir - listing....
-Root dir: cluster 2, first block 18432
-[DIR]  System Volume Information  cluster 3
-[FILE] Prince.rgb  cluster 6  size 153600
-[FILE] LongNameTesting.txt  cluster 11  size 1
-[DIR]  Testing_Dir  cluster 12
-Root dir done, 4 entries
-Root dir Ok
- ---- Closed serial port COM14 due to disconnection from the machine ---- */
