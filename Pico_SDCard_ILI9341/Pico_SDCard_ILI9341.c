@@ -120,17 +120,17 @@ int main()
     uart0_puts("CMD17 FAIL\r\n");
   }
 
-  // read-twice integrity test
-  uart0_puts("Integrity test....\r\n");
-  if (sd_integrity_test(18688, 300) == 0)
-  {
-    uart0_puts("Integrity Ok - 300 blocks read twice, all identical\r\n");
-    uart0_puts("\r\n");
-  }
-  else
-  {
-    uart0_puts("Integrity FAIL - data path not clean at this clock\r\n");
-  }
+  // // read-twice integrity test
+  // uart0_puts("Integrity test....\r\n");
+  // if (sd_integrity_test(18688, 300) == 0)
+  // {
+  //   uart0_puts("Integrity Ok - 300 blocks read twice, all identical\r\n");
+  //   uart0_puts("\r\n");
+  // }
+  // else
+  // {
+  //   uart0_puts("Integrity FAIL - data path not clean at this clock\r\n");
+  // }
 
   // MBR Parser
   // block 0 is the partition table. the start LBA it hands back is already

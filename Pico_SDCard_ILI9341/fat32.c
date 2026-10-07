@@ -888,36 +888,34 @@ void read_prince(const fat_geom_t *g)
     }
 }
 
-// context handed to the display sink. one field is enough: a running total of
-// pixel-bytes we have pushed at the panel, so the log can prove the whole
-// frame arrived.
+// context handed to the display sink: one field is enough : a running total of
+//  pixel-bytes we have pushed at the panel, so the log can prove the whole frame arrived
+
 typedef struct
 {
-    uint32_t bytes; // pixel-bytes streamed so far
+    uint32_t bytes; // pixel bytes streamed so far
 } disp_ctx_t;
 
-// the display sink: the reader calls this once per 512 byte block (the last
-// call may be shorter). it turns a block of RGB565 bytes into panel writes.
-// the write window was opened once for the whole frame, so this does no row
-// math at all - it just streams pixel pairs and lets the controller advance.
-static void lcd_sink(const uint8_t *buf, uint32_t len, void *ctx)
+// the display sink: the reader calls this once per 512 bytes block(the last call may be shorter)
+// it turns a block of RG565 bytes into panel writes. the write window was opened once for the whole frame.
+// so this does no row math at all it just streams pixel pairs and lets the controller advance
+static void lcd_sink(const uint8_t *buf, uint32_t len, void *ctx) // parameters are 512 byte buffer , the length of bytes to stream passed from file reader , and the context ctx struct containing the info of the bytes streamed so far since this is a generic pointer we ahve to cast it as struct pointer in func
 {
-    disp_ctx_t *p = (disp_ctx_t *)ctx;
-    // a pixel is 2 bytes. step i by 2 so a pair is never split.
+    disp_ctx_t *p = (disp_ctx_t *)(ctx); // restore the pointer type as ctx was passed as a generic pointer type, thus it need to be cast to reattach the type to the raw address to dereference the struct and copy that pointer's value into p
+    // a pixel is 2 bytes , step i by 2 so a pair is never split
     for (uint32_t i = 0; i + 1 < len; i += 2)
     {
-        // file is little-endian RGB565, the panel wants the high byte first.
-        // if the image comes out looking right, this order is the one.
-        // if the colours are wrong but the shapes are fine, swap these two.
-        ili9341_write_data(buf[i]); // high byte first
-        ili9341_write_data(buf[i+1]);     // then the low byte
+        // the file stores each pixel HIGH byte first ( the pillow script wrote
+        // (c>>8) then (c & 0xFF)), and the pannel also wants HIGH byte first so
+        // the bytes go out in file order - no swap.
+        ili9341_write_data(buf[i]);     // high byte (first in file)
+        ili9341_write_data(buf[i + 1]); // low byte
     }
     p->bytes += len;
 }
 
-// draw Prince.rgb full screen. g is the geometry parsed in main - borrowed,
-// never rebuilt here. Prince.rgb is the entry the tree already printed:
-// cluster 6, size 153600 = 240 * 320 * 2 pixels.
+// draw Prince.rgb full screen. g is the geometry parsed in main - borrowed,never rebuilt here.
+// Prince.rgb is the entry the tree already printed : cluster 6 size 153600 = 240*320*2 pixels
 void draw_prince(const fat_geom_t *g)
 {
     disp_ctx_t ctx;
@@ -925,31 +923,24 @@ void draw_prince(const fat_geom_t *g)
 
     ctx.bytes = 0;
 
-    // orientation: clear the MX mirror the old tank code left in MADCTL.
-    // 0x08 keeps BGR (correct red/blue on this panel) and drops the flip.
-    // ili9341_write_command(0x36);
-    // ili9341_write_data(0x08);
-
-    // open ONE window for the whole frame: columns 0..239. the panel wants
-    // the high byte of each 16 bit bound first.
+    // open one window for the whole frame: column 0..239. the panel wants the high byte of each 16 bit bound first
     ili9341_write_command(0x2A);
-    ili9341_write_data(0x00);
-    ili9341_write_data(0x00);
-    ili9341_write_data(0x00);
-    ili9341_write_data(0xEF); // 239
+    ili9341_write_data(0x00); // start col high byte
+    ili9341_write_data(0x00); // start col low byte
+    ili9341_write_data(0x00); // end col high byte
+    ili9341_write_data(0xEF); // end col low byte
 
     // rows 0..319
     ili9341_write_command(0x2B);
-    ili9341_write_data(0x00);
-    ili9341_write_data(0x00);
-    ili9341_write_data(0x01);
-    ili9341_write_data(0x3F); // 319
+    ili9341_write_data(0x00); // start row high byte
+    ili9341_write_data(0x00); // start row low byte
+    ili9341_write_data(0x01); // end row high byte
+    ili9341_write_data(0x3F); // end row low byte
 
-    // from here every 2 bytes is one pixel and the controller places it.
-    ili9341_write_command(0x2C);
-
+    // from here every 2 bytes is one pixel and the controller places it
+    ili9341_write_command(0x2c);
     uart0_puts("LCD: streaming Prince.rgb...\r\n");
-    // same reader, same chain walk, new consumer. geometry goes straight in.
+    // same reader, same chain walk, new consumer, geometry goes straight in
     rc = fat32_read_file(g, 6, 153600, lcd_sink, &ctx);
 
     if (rc == 0)
